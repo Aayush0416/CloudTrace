@@ -1,0 +1,5 @@
+{ "name": "medium-env", "provider": "aws", "resources": [
+  { "id": "ec2-001", "type": "compute", "subtype": "ec2", "name": "web-server", "public": true, "criticality": "medium", "relationships": [{ "type": "uses", "target": "role-web" }] },
+  { "id": "role-web", "type": "identity", "subtype": "iam_role", "name": "web-role", "permissions": [{ "action": "write", "target": "s3-data" }] },
+  { "id": "s3-data", "type": "storage", "subtype": "s3", "name": "customer-data", "criticality": "high" }
+] }

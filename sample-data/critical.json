@@ -1,0 +1,6 @@
+{ "name": "critical-env", "provider": "aws", "resources": [
+  { "id": "ec2-001", "type": "compute", "subtype": "ec2", "name": "web-server", "public": true, "criticality": "medium", "properties": { "openPorts": [22, 443] }, "relationships": [{ "type": "uses", "target": "role-admin" }] },
+  { "id": "role-admin", "type": "identity", "subtype": "iam_role", "name": "web-admin-role", "permissions": [{ "action": "admin", "target": "secret-db" }] },
+  { "id": "secret-db", "type": "secret", "subtype": "secrets_manager", "name": "prod-db-credentials", "criticality": "high", "relationships": [{ "type": "can_access", "target": "rds-prod" }] },
+  { "id": "rds-prod", "type": "database", "subtype": "rds", "name": "prod-database", "criticality": "critical" }
+] }

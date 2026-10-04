@@ -1,0 +1,400 @@
+{
+ "name": "enterprise-env",
+ "provider": "aws",
+ "resources": [
+  {
+   "id": "vpc-main",
+   "type": "network",
+   "subtype": "vpc",
+   "name": "prod-vpc"
+  },
+  {
+   "id": "subnet-public",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "public-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "subnet-app",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "app-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "subnet-data",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "data-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "sg-alb",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "alb-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 443,
+      "source": "internet"
+     }
+    ]
+   }
+  },
+  {
+   "id": "sg-bastion",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "bastion-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 22,
+      "source": "internet"
+     }
+    ]
+   }
+  },
+  {
+   "id": "sg-web",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "web-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 8080,
+      "source": "sg-alb"
+     },
+     {
+      "port": 22,
+      "source": "sg-bastion"
+     }
+    ]
+   }
+  },
+  {
+   "id": "sg-lambda",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "lambda-sg",
+   "properties": {
+    "ingress": []
+   }
+  },
+  {
+   "id": "sg-db",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "db-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 5432,
+      "source": "sg-web"
+     },
+     {
+      "port": 5432,
+      "source": "sg-lambda"
+     },
+     {
+      "port": 5432,
+      "source": "sg-bastion"
+     }
+    ]
+   }
+  },
+  {
+   "id": "alb-web",
+   "type": "api",
+   "subtype": "load_balancer",
+   "name": "public-alb",
+   "public": true,
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-alb"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-public"
+    }
+   ]
+  },
+  {
+   "id": "bastion",
+   "type": "compute",
+   "subtype": "ec2",
+   "name": "bastion-host",
+   "public": true,
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-bastion"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-public"
+    },
+    {
+     "type": "uses",
+     "target": "role-ops"
+    }
+   ]
+  },
+  {
+   "id": "api-gw",
+   "type": "api",
+   "subtype": "api_gateway",
+   "name": "orders-api",
+   "public": true,
+   "criticality": "medium",
+   "relationships": [
+    {
+     "type": "connects_to",
+     "target": "lambda-orders"
+    }
+   ]
+  },
+  {
+   "id": "ec2-web-1",
+   "type": "compute",
+   "subtype": "ec2",
+   "name": "web-server-1",
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-web"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-app"
+    },
+    {
+     "type": "uses",
+     "target": "role-web"
+    }
+   ]
+  },
+  {
+   "id": "ec2-web-2",
+   "type": "compute",
+   "subtype": "ec2",
+   "name": "web-server-2",
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-web"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-app"
+    },
+    {
+     "type": "uses",
+     "target": "role-web"
+    }
+   ]
+  },
+  {
+   "id": "lambda-orders",
+   "type": "compute",
+   "subtype": "lambda",
+   "name": "orders-function",
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-lambda"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "uses",
+     "target": "role-orders"
+    }
+   ]
+  },
+  {
+   "id": "role-web",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "web-role",
+   "permissions": [
+    {
+     "action": "write",
+     "target": "s3-uploads"
+    },
+    {
+     "action": "read",
+     "target": "secret-db-creds"
+    }
+   ]
+  },
+  {
+   "id": "role-orders",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "orders-role",
+   "permissions": [
+    {
+     "action": "read",
+     "target": "rds-orders"
+    }
+   ]
+  },
+  {
+   "id": "role-ops",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "ops-role",
+   "relationships": [
+    {
+     "type": "assumes",
+     "target": "role-admin"
+    }
+   ]
+  },
+  {
+   "id": "role-admin",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "admin-role",
+   "permissions": [
+    {
+     "action": "admin",
+     "target": "s3-customer-data"
+    },
+    {
+     "action": "admin",
+     "target": "secret-db-creds"
+    },
+    {
+     "action": "admin",
+     "target": "kms-prod"
+    }
+   ]
+  },
+  {
+   "id": "role-deploy",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "deploy-role",
+   "permissions": [
+    {
+     "action": "write",
+     "target": "s3-uploads"
+    }
+   ],
+   "relationships": [
+    {
+     "type": "assumes",
+     "target": "role-ops"
+    }
+   ]
+  },
+  {
+   "id": "user-ci",
+   "type": "identity",
+   "subtype": "iam_user",
+   "name": "ci-service-user",
+   "properties": {
+    "compromised": true
+   },
+   "permissions": [
+    {
+     "action": "read",
+     "target": "s3-artifacts"
+    }
+   ],
+   "relationships": [
+    {
+     "type": "assumes",
+     "target": "role-deploy"
+    }
+   ]
+  },
+  {
+   "id": "s3-uploads",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "user-uploads",
+   "criticality": "medium"
+  },
+  {
+   "id": "s3-artifacts",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "build-artifacts"
+  },
+  {
+   "id": "s3-customer-data",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "customer-data",
+   "criticality": "high"
+  },
+  {
+   "id": "secret-db-creds",
+   "type": "secret",
+   "subtype": "secrets_manager",
+   "name": "orders-db-credentials",
+   "criticality": "high",
+   "relationships": [
+    {
+     "type": "can_access",
+     "target": "rds-orders"
+    }
+   ]
+  },
+  {
+   "id": "kms-prod",
+   "type": "secret",
+   "subtype": "kms",
+   "name": "prod-encryption-key",
+   "criticality": "critical"
+  },
+  {
+   "id": "rds-orders",
+   "type": "database",
+   "subtype": "rds",
+   "name": "orders-database",
+   "criticality": "critical",
+   "properties": {
+    "securityGroups": [
+     "sg-db"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-data"
+    }
+   ]
+  }
+ ]
+}

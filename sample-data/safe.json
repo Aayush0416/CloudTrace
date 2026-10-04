@@ -1,0 +1,5 @@
+{ "name": "safe-env", "provider": "aws", "resources": [
+  { "id": "ec2-001", "type": "compute", "subtype": "ec2", "name": "app-server", "criticality": "medium", "relationships": [{ "type": "uses", "target": "role-app" }] },
+  { "id": "role-app", "type": "identity", "subtype": "iam_role", "name": "app-role", "permissions": [{ "action": "read", "target": "s3-prod" }] },
+  { "id": "s3-prod", "type": "storage", "subtype": "s3", "name": "prod-data", "criticality": "high" }
+] }

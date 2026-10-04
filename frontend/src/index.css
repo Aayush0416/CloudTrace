@@ -1,0 +1,94 @@
+@import "tailwindcss";
+@theme {
+  /* Palette: #000000 #14213d #fca311 #e5e5e5 #ffffff */
+  --color-navy-900: #000000;
+  --color-navy-800: #14213d;
+  --color-navy-700: #2b3d63;
+  --color-gold: #fca311;
+  --color-gold-light: #ffb84d;
+  --color-bg: #000000;
+  --color-panel: #0a0f1c;
+  --color-raised: #14213d;
+  --color-line: #22304f;
+  --color-fg: #e5e5e5;
+  --color-muted: #97a3ba;
+  --color-accent: #fca311;
+  --color-accent-2: #ffb84d;
+  --color-crit: #ff4d4f;
+  --color-high: #ff7a59;
+  --color-med: #b388ff;
+  --color-low: #4da3ff;
+  --color-info: #97a3ba;
+  --color-ok: #3ddc97;
+  --font-sans:
+    "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono:
+    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+/* Type scale: 14px body, 12px small, 24px page titles, 28px metrics */
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  font-feature-settings: "tnum";
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.page {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 24px 28px 40px;
+}
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-gold) 35%, transparent);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-navy-700) transparent;
+}
+.react-flow__node {
+  cursor: pointer;
+}
+.react-flow__controls-button {
+  background: var(--color-panel) !important;
+  border-color: var(--color-line) !important;
+  fill: var(--color-fg) !important;
+}
+@media print {
+  .app-chrome,
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body,
+  #root,
+  #root > div,
+  main {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    background: #fff !important;
+  }
+  * {
+    color: #000 !important;
+    border-color: #ccc !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}

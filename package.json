@@ -1,0 +1,1 @@
+{ "name": "cloudtrace", "private": true, "workspaces": ["backend"] }

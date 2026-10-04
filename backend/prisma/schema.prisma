@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  email           String    @unique
+  passwordHash    String?   @map("password_hash")
+  emailVerified   Boolean   @default(false) @map("email_verified")
+  verifyTokenHash String?   @map("verify_token_hash")
+  verifyExpires   DateTime? @map("verify_expires")
+  googleId        String?   @unique @map("google_id")
+  tokenVersion    Int       @default(0) @map("token_version")
+  resetTokenHash  String?   @map("reset_token_hash")
+  resetExpires    DateTime? @map("reset_expires")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  projects        Project[]
+  memberships     TeamMember[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Team {
+  id          String    @id @default(cuid())
+  name        String
+  createdAt   DateTime  @default(now()) @map("created_at")
+  members     TeamMember[]
+  projects    Project[]
+  auditLogs   AuditLog[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String   @map("team_id")
+  userId    String   @map("user_id")
+  role      String   @default("viewer") // owner, editor, viewer
+  createdAt DateTime @default(now()) @map("created_at")
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  ownerId     String   @map("owner_id")
+  teamId      String?  @map("team_id")
+  name        String
+  description String?
+  provider    String   @default("aws")
+  environment Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  scans       Scan[]
+  findingStates FindingState[]
+  auditLogs   AuditLog[]
+
+  @@map("projects")
+}
+
+model Scan {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  status      String    @default("completed")
+  source      String    @default("json_import")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  result      Json?
+  error       String?
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("scans")
+}
+
+model FindingState {
+  id         String   @id @default(cuid())
+  projectId  String   @map("project_id")
+  ruleId     String   @map("rule_id")
+  resourceId String   @map("resource_id")
+  status     String   @default("open")
+  note       String?
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, ruleId, resourceId])
+  @@map("finding_states")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  teamId    String?  @map("team_id")
+  projectId String?  @map("project_id")
+  action    String
+  details   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
