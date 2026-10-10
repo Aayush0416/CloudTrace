@@ -1,0 +1,109 @@
+{
+ "name": "public-storage-and-leaked-key",
+ "provider": "aws",
+ "resources": [
+  {
+   "id": "vpc-main",
+   "type": "network",
+   "subtype": "vpc",
+   "name": "prod-vpc"
+  },
+  {
+   "id": "subnet-public",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "public-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "sg-db-open",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "db-open-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 5432,
+      "source": "internet"
+     }
+    ]
+   }
+  },
+  {
+   "id": "s3-backups",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "db-backups-bucket",
+   "public": true,
+   "criticality": "critical"
+  },
+  {
+   "id": "s3-marketing",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "marketing-site-assets",
+   "public": true,
+   "criticality": "low"
+  },
+  {
+   "id": "rds-orders",
+   "type": "database",
+   "subtype": "rds",
+   "name": "orders-db",
+   "public": true,
+   "criticality": "critical",
+   "properties": {
+    "securityGroups": [
+     "sg-db-open"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-public"
+    }
+   ]
+  },
+  {
+   "id": "user-deploy",
+   "type": "identity",
+   "subtype": "iam_user",
+   "name": "deploy-user-legacy-key",
+   "properties": {
+    "compromised": true
+   },
+   "permissions": [
+    {
+     "action": "write",
+     "target": "s3-backups"
+    },
+    {
+     "action": "read",
+     "target": "secret-db-creds"
+    },
+    {
+     "action": "read",
+     "target": "s3-marketing"
+    }
+   ]
+  },
+  {
+   "id": "secret-db-creds",
+   "type": "secret",
+   "subtype": "secrets_manager",
+   "name": "orders-db-credentials",
+   "criticality": "high",
+   "relationships": [
+    {
+     "type": "can_access",
+     "target": "rds-orders"
+    }
+   ]
+  }
+ ]
+}

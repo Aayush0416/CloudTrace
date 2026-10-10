@@ -6,10 +6,20 @@ import { OAuth2Client } from "google-auth-library";
 import { z } from "zod";
 import { prisma } from "../db";
 import { config } from "../config";
-import { HttpError, requireAuth, userId } from "../middleware";
+import {
+  HttpError,
+  loginLimiter,
+  mailLimiter,
+  requireAuth,
+  userId,
+} from "../middleware";
 import { mailConfigured, sendMail } from "../services/mailer";
 
 const r = Router();
+/** Compared against when the email is unknown, so response time does not reveal whether an account exists. */
+const DUMMY_HASH = bcrypt.hashSync("cloudtrace-dummy-password", 12);
+const isUniqueViolation = (e: unknown) =>
+  typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
 type U = {
   id: string;
   name: string;
@@ -88,20 +98,28 @@ r.get("/config", (_req, res) =>
   }),
 );
 
-r.post("/register", async (req, res) => {
+r.post("/register", mailLimiter, async (req, res) => {
   const b = creds.extend({ name: z.string().trim().min(2) }).parse(req.body);
   const existing = await prisma.user.findUnique({ where: { email: b.email } });
   if (existing?.emailVerified)
     throw new HttpError(409, "An account with this email already exists");
   const passwordHash = await bcrypt.hash(b.password, 12);
-  const u = existing
-    ? await prisma.user.update({
-        where: { id: existing.id },
-        data: { name: b.name, passwordHash },
-      })
-    : await prisma.user.create({
-        data: { name: b.name, email: b.email, passwordHash },
-      });
+  let u;
+  try {
+    u = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: { name: b.name, passwordHash },
+        })
+      : await prisma.user.create({
+          data: { name: b.name, email: b.email, passwordHash },
+        });
+  } catch (e) {
+    // Two simultaneous sign-ups for one address: the loser gets the same answer as a duplicate.
+    if (isUniqueViolation(e))
+      throw new HttpError(409, "An account with this email already exists");
+    throw e;
+  }
   if (config.devAutoVerify) {
     res
       .status(201)
@@ -148,18 +166,20 @@ r.post("/verify", async (req, res) => {
     ),
   );
 });
-r.post("/resend", async (req, res) => {
+r.post("/resend", mailLimiter, async (req, res) => {
   const { email } = z
     .object({ email: z.string().email().toLowerCase() })
     .parse(req.body);
   const u = await prisma.user.findUnique({ where: { email } });
   res.json({
     ok: true,
-    delivered: u && !u.emailVerified ? await sendLink(u, "verify") : true,
-  }); // same response either way: no account enumeration
+    // Same shape for unknown and already-verified addresses: `delivered` falls back to whether mail is configured at all.
+    delivered:
+      u && !u.emailVerified ? await sendLink(u, "verify") : mailConfigured,
+  });
 });
 
-r.post("/login", async (req, res) => {
+r.post("/login", loginLimiter, async (req, res) => {
   const b = creds.parse(req.body);
   const u = await prisma.user.findUnique({ where: { email: b.email } });
   if (u && !u.passwordHash)
@@ -167,7 +187,7 @@ r.post("/login", async (req, res) => {
       401,
       'This account uses Google sign-in. Continue with Google, or use "Forgot password" to set a password.',
     );
-  if (!u || !(await bcrypt.compare(b.password, u.passwordHash!)))
+  if (!(await bcrypt.compare(b.password, u?.passwordHash ?? DUMMY_HASH)) || !u)
     throw new HttpError(401, "Email or password is incorrect");
   if (!u.emailVerified)
     throw new HttpError(403, "Verify your email address before signing in.", [
@@ -199,7 +219,13 @@ r.post("/google", async (req, res) => {
   if (!p?.email || !p.email_verified)
     throw new HttpError(401, "Your Google email address is not verified");
   const email = p.email.toLowerCase(),
-    existing = await prisma.user.findUnique({ where: { email } });
+    byGoogle = await prisma.user.findUnique({ where: { googleId: p.sub } }),
+    existing = byGoogle ?? (await prisma.user.findUnique({ where: { email } }));
+  if (existing?.googleId && existing.googleId !== p.sub)
+    throw new HttpError(
+      409,
+      "This email is already linked to a different Google account.",
+    );
   res.json(
     issue(
       existing
@@ -210,6 +236,11 @@ r.post("/google", async (req, res) => {
               emailVerified: true,
               verifyTokenHash: null,
               verifyExpires: null,
+              // A password set on a never-verified account was chosen by whoever pre-registered the address,
+              // not necessarily its owner. Google proves ownership, so that password is discarded.
+              ...(existing.emailVerified
+                ? {}
+                : { passwordHash: null, tokenVersion: { increment: 1 } }),
             },
           })
         : await prisma.user.create({
@@ -224,12 +255,15 @@ r.post("/google", async (req, res) => {
   );
 });
 
-r.post("/forgot", async (req, res) => {
+r.post("/forgot", mailLimiter, async (req, res) => {
   const { email } = z
     .object({ email: z.string().email().toLowerCase() })
     .parse(req.body);
   const u = await prisma.user.findUnique({ where: { email } });
-  res.json({ ok: true, delivered: u ? await sendLink(u, "reset") : true });
+  res.json({
+    ok: true,
+    delivered: u ? await sendLink(u, "reset") : mailConfigured,
+  });
 });
 r.post("/reset", async (req, res) => {
   const b = z.object({ token: z.string().min(10), password }).parse(req.body);

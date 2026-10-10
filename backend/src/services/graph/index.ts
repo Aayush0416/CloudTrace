@@ -1,5 +1,5 @@
 import Graph from "graphology";
-import type { Environment, EdgeType, Resource } from "../parser";
+import { ingressOf, sgsOf, type Environment, type EdgeType, type Resource } from "../parser";
 
 export interface EdgeMeta {
   type: EdgeType;
@@ -13,19 +13,6 @@ export const INTERNET = "internet";
 export const STRUCTURAL = new Set<string>(["contains", "runs_on"]);
 export const isNetworkObject = (r: { subtype: string }) =>
   ["vpc", "subnet", "security_group"].includes(r.subtype);
-
-interface Ingress {
-  port: number;
-  source: string;
-}
-const ingressOf = (r: Resource): Ingress[] =>
-  Array.isArray(r.properties.ingress)
-    ? (r.properties.ingress as Ingress[])
-    : [];
-const sgsOf = (r: Resource): string[] =>
-  Array.isArray(r.properties.securityGroups)
-    ? (r.properties.securityGroups as string[])
-    : [];
 
 /**
  * Builds a directed multigraph. Every edge carries type, confidence and evidence (why it exists).
@@ -79,7 +66,7 @@ export function buildGraph(env: Environment): SecurityGraph {
 
   for (const r of env.resources) {
     if (r.public) {
-      const sgs = sgsOf(r).map((id) => byId.get(id)!),
+      const sgs = sgsOf(r).flatMap((id) => byId.get(id) ?? []),
         open = sgs.flatMap(ingressOf).filter((i) => i.source === "internet");
       if (!sgs.length || open.length)
         add(INTERNET, r.id, {

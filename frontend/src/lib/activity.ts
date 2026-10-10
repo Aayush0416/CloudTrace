@@ -31,7 +31,7 @@ export function useActivity(id: string): ActivityItem[] {
   if (diff.data) {
     for (const p of diff.data.newPaths.slice(0, 3))
       items.push({
-        key: `new-${p.nodes.join()}`,
+        key: `new-${p.id}-${p.nodes.join()}`,
         tone: p.severity === "critical" ? "crit" : "high",
         title: `New ${p.severity} attack path`,
         sub: p.nodes.map(nm).join(" → "),
@@ -39,7 +39,7 @@ export function useActivity(id: string): ActivityItem[] {
       });
     for (const p of diff.data.resolvedPaths.slice(0, 3))
       items.push({
-        key: `res-${p.nodes.join()}`,
+        key: `res-${p.id}-${p.nodes.join()}`,
         tone: "ok",
         title: "Attack path resolved",
         sub: p.nodes.map(nm).join(" → "),

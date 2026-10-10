@@ -51,7 +51,7 @@ export default function WhatIfResult({
           <div className="mb-1 text-muted">Paths removed</div>
           <ul className="space-y-1">
             {data.removed.map((p) => (
-              <li key={p.nodes.join()} className="flex items-center gap-2">
+              <li key={p.id} className="flex items-center gap-2">
                 <SeverityBadge s={p.severity} />
                 <span className="truncate">
                   {p.nodes.map(label).join(" → ")}
@@ -65,7 +65,7 @@ export default function WhatIfResult({
         <div>
           <div className="mb-1 text-muted">Score changes</div>
           {data.changed.map((c) => (
-            <div key={c.nodes.join()}>
+            <div key={c.id}>
               {c.nodes.map(label).join(" → ")}: {c.from} → {c.to}
             </div>
           ))}

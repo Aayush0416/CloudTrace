@@ -1,3 +1,5 @@
+import { usePrefs } from "../../lib/prefs";
+import ThemeToggle from "../../components/ThemeToggle";
 import { lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { Background, ReactFlow } from "@xyflow/react";
@@ -13,7 +15,8 @@ import {
   Wrench,
 } from "lucide-react";
 import sample from "./sample.json";
-import { buildFlow, nodeTypes } from "../attack-paths/graphKit";
+import { buildFlow, edgeTypes, nodeTypes } from "../attack-paths/graphKit";
+import { useGraphHover } from "../attack-paths/GraphHover";
 import type { AttackPath, GraphData, ResourceRow } from "../../lib/types";
 
 const Graph3D = lazy(() => import("../../components/Graph3D"));
@@ -32,6 +35,10 @@ const FLOW = buildFlow({
   showAll: true,
   mode: "all",
 });
+
+const CHOKE = new Map(sample.chokePoints.map((c) => [c.id, c.paths]));
+const SAMPLE_GRAPH = sample.graph as unknown as GraphData;
+const SAMPLE_ROWS = sample.resources as unknown as ResourceRow[];
 
 const STATS = [
   ["4", "graph algorithms", "DFS, BFS, Dijkstra, Yen"],
@@ -91,38 +98,51 @@ const FEATURES = [
 ] as const;
 
 export default function Landing() {
+  const { theme } = usePrefs();
+  const hover = useGraphHover({
+    g: SAMPLE_GRAPH,
+    resources: SAMPLE_ROWS,
+    paths,
+    choke: CHOKE,
+  });
+  const navLink =
+    "relative py-1 text-[15px] font-medium text-fg/80 transition-colors hover:text-heading after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:origin-left after:scale-x-0 after:bg-brand after:transition-transform hover:after:scale-x-100";
+  const eyebrow =
+    "mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-accent";
   return (
-    <div className="h-full overflow-auto bg-bg">
-      <header className="sticky top-0 z-20 border-b border-line/70 bg-black/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+    <div className="display h-full overflow-auto bg-bg">
+      {/* navy in both themes, like the app's own top bar */}
+      <header className="on-dark sticky top-0 z-30 border-b border-line/60 bg-hero/90 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link
             to="/"
-            className="flex items-center gap-2 text-lg font-semibold text-white"
+            className="flex items-center gap-2 text-lg font-semibold text-heading"
           >
             <Waypoints className="text-accent" />
             CloudTrace
           </Link>
-          <nav className="hidden items-center gap-7 text-muted md:flex">
-            <a href="#how" className="hover:text-fg">
-              How it works
+          <nav className="hidden items-center gap-8 md:flex">
+            <a href="#how" className={navLink}>
+              Workflow
             </a>
-            <a href="#graph" className="hover:text-fg">
-              The graph
+            <a href="#graph" className={navLink}>
+              Live graph
             </a>
-            <a href="#features" className="hover:text-fg">
-              Features
+            <a href="#features" className={navLink}>
+              Capabilities
             </a>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <ThemeToggle />
             <Link
               to="/register"
-              className="hidden h-9 items-center rounded px-3 text-muted hover:text-fg sm:inline-flex"
+              className="hidden h-9 items-center rounded-md px-3 text-fg/80 hover:text-heading sm:inline-flex"
             >
               Create account
             </Link>
             <Link
               to="/login"
-              className="inline-flex h-9 items-center rounded bg-accent px-4 font-semibold text-bg hover:bg-accent-2"
+              className="inline-flex h-9 items-center rounded-md bg-brand px-4 font-semibold text-on-brand hover:bg-brand-2"
             >
               Sign in
             </Link>
@@ -130,55 +150,61 @@ export default function Landing() {
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-14 lg:grid-cols-[1.05fr_1fr]">
-        <div>
-          <p className="mb-4 text-sm font-medium text-accent">
-            Cloud attack path analysis
-          </p>
-          <h1 className="text-4xl font-semibold leading-[1.1] lg:text-[52px]">
-            Trace the route to your data before an attacker does.
-          </h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            CloudTrace maps exposed resources, identities, permissions and
-            network access into one graph, then ranks every path an attacker
-            could take to reach what matters.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              to="/login"
-              className="inline-flex h-11 items-center gap-2 rounded bg-accent px-6 font-semibold text-bg hover:bg-accent-2"
-            >
-              Sign in
-              <ArrowRight size={16} />
-            </Link>
-            <Link
-              to="/register"
-              className="inline-flex h-11 items-center rounded border border-line px-6 hover:bg-raised"
-            >
-              Create an account
-            </Link>
+      {/* The 3D attack graph is the hero's background; a soft fade on the left keeps the headline readable. */}
+      <section className="on-dark relative isolate overflow-hidden bg-hero">
+        <Suspense fallback={null}>
+          <Graph3D
+            variant="hero"
+            className="absolute inset-0 -z-20 h-full w-full opacity-45 sm:opacity-70 lg:opacity-100"
+          />
+        </Suspense>
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 [background:linear-gradient(to_right,var(--color-hero)_26%,color-mix(in_srgb,var(--color-hero)_72%,transparent)_48%,transparent_80%)] max-lg:[background:linear-gradient(to_bottom,color-mix(in_srgb,var(--color-hero)_88%,transparent),color-mix(in_srgb,var(--color-hero)_55%,transparent))]"
+        />
+        <div className="mx-auto flex min-h-[560px] max-w-6xl items-center px-4 py-16 sm:px-6 lg:min-h-[640px]">
+          <div className="max-w-2xl">
+            <p className={eyebrow}>Cloud attack path analysis</p>
+            <h1 className="text-[36px] font-semibold leading-[1.1] sm:text-[48px] lg:text-[60px]">
+              Trace the route to your data before an attacker does.
+            </h1>
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
+              CloudTrace maps exposed resources, identities, permissions and
+              network access into one graph, then ranks every path an attacker
+              could take to reach what matters.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                to="/login"
+                className="inline-flex h-12 items-center gap-2 rounded-md bg-brand px-7 font-semibold text-on-brand shadow-lg shadow-black/20 transition-colors hover:bg-brand-2"
+              >
+                Sign in
+                <ArrowRight size={16} />
+              </Link>
+              <Link
+                to="/register"
+                className="inline-flex h-12 items-center rounded-md border border-fg/30 px-7 font-medium text-heading transition-colors hover:border-brand hover:text-brand"
+              >
+                Create an account
+              </Link>
+            </div>
+            <p className="mt-4 text-sm text-muted">
+              Analysis only. CloudTrace never exploits or changes your
+              environment.
+            </p>
           </div>
-          <p className="mt-4 text-sm text-muted">
-            Analysis only. CloudTrace never exploits or changes your
-            environment.
-          </p>
         </div>
-        <div className="relative h-[400px] overflow-hidden rounded-md border border-line bg-[radial-gradient(ellipse_at_center,var(--color-navy-800)_0%,#000_72%)]">
-          <Suspense fallback={null}>
-            <Graph3D variant="hero" className="h-full w-full" />
-          </Suspense>
-          <div className="pointer-events-none absolute bottom-3 left-4 flex items-center gap-2 text-xs text-muted">
-            <span className="h-0.5 w-5 bg-accent" />
-            Highlighted route from entry point to target. Illustrative model.
-          </div>
+        <div className="pointer-events-none absolute bottom-4 right-6 hidden items-center gap-2 text-xs text-muted sm:flex">
+          <span className="h-0.5 w-5 bg-brand" />
+          Highlighted route from entry point to target. Illustrative model.
         </div>
       </section>
 
-      <section className="border-y border-line bg-panel">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-8 md:grid-cols-4">
+      <section className="border-b border-line bg-panel">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-9 sm:px-6 md:grid-cols-4">
           {STATS.map(([n, t, d]) => (
-            <div key={t}>
-              <div className="text-3xl font-semibold text-white">{n}</div>
+            <div key={t} className="border-l-[3px] border-brand pl-4">
+              <div className="text-3xl font-semibold text-heading">{n}</div>
               <div className="mt-1 font-medium">{t}</div>
               <div className="text-sm text-muted">{d}</div>
             </div>
@@ -186,15 +212,21 @@ export default function Landing() {
         </div>
       </section>
 
-      <section id="how" className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-2xl font-semibold">
-          From a JSON file to a ranked list of routes
+      <section id="how" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <p className={eyebrow}>Workflow</p>
+        <h2 className="max-w-2xl text-[28px] font-semibold leading-tight sm:text-[34px]">
+          Four steps from a file to a fix list
         </h2>
-        <div className="mt-8 grid gap-px overflow-hidden rounded-md border border-line bg-line md:grid-cols-4">
+        <div className="mt-10 grid gap-4 md:grid-cols-4">
           {STEPS.map(([t, d], i) => (
-            <div key={t} className="bg-bg p-6">
-              <div className="font-mono text-sm text-accent">0{i + 1}</div>
-              <h3 className="mt-3 text-base font-semibold">{t}</h3>
+            <div
+              key={t}
+              className="rounded-lg border border-line bg-panel p-6 shadow-[var(--card-shadow)]"
+            >
+              <div className="font-display text-[40px] font-semibold leading-none text-accent">
+                {i + 1}
+              </div>
+              <h3 className="mt-4 text-base font-semibold">{t}</h3>
               <p className="mt-2 leading-relaxed text-muted">{d}</p>
             </div>
           ))}
@@ -202,20 +234,26 @@ export default function Landing() {
       </section>
 
       <section id="graph" className="border-y border-line bg-panel py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <h2 className="text-2xl font-semibold">The graph is the product</h2>
-          <p className="mt-2 max-w-2xl text-muted">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <p className={eyebrow}>Live graph</p>
+          <h2 className="max-w-2xl text-[28px] font-semibold leading-tight sm:text-[34px]">
+            See every route in one graph
+          </h2>
+          <p className="mt-3 max-w-2xl text-muted">
             This is the real graph component on a bundled sample environment
             with two entry points and several sensitive targets. Every branch is
             drawn. Line style shows the kind of link, ring colour shows risk,
-            and critical branches are heavier.
+            and critical branches are heavier. Hover anything for details.
           </p>
-          <div className="mt-8 h-[500px] overflow-hidden rounded-md border border-line bg-bg">
+          <div className="mt-8 h-[500px] overflow-hidden rounded-lg border border-line bg-bg shadow-[var(--card-shadow)]">
+            {hover.tip}
             <ReactFlow
+              {...hover.bind}
               nodes={FLOW.nodes}
               edges={FLOW.edges}
               nodeTypes={nodeTypes}
-              colorMode="dark"
+              edgeTypes={edgeTypes}
+              colorMode={theme}
               fitView
               fitViewOptions={{ padding: 0.2 }}
               nodesDraggable={false}
@@ -228,18 +266,26 @@ export default function Landing() {
               preventScrolling={false}
               proOptions={{ hideAttribution: true }}
             >
-              <Background color="#10182b" gap={26} />
+              <Background color="var(--graph-dots)" gap={26} />
             </ReactFlow>
           </div>
         </div>
       </section>
 
-      <section id="features" className="mx-auto max-w-6xl px-6 py-20">
-        <h2 className="text-2xl font-semibold">Built for investigation</h2>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <section id="features" className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <p className={eyebrow}>Capabilities</p>
+        <h2 className="max-w-2xl text-[28px] font-semibold leading-tight sm:text-[34px]">
+          Everything you need to investigate and fix
+        </h2>
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
           {FEATURES.map(([Icon, t, d]) => (
-            <div key={t} className="rounded-md border border-line bg-panel p-6">
-              <Icon size={20} className="text-accent" />
+            <div
+              key={t}
+              className="group rounded-lg border border-line bg-panel p-6 shadow-[var(--card-shadow)] transition duration-200 hover:-translate-y-0.5 hover:border-brand"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand/15 text-accent transition-colors group-hover:bg-brand group-hover:text-on-brand">
+                <Icon size={21} />
+              </span>
               <h3 className="mt-4 text-base font-semibold">{t}</h3>
               <p className="mt-2 leading-relaxed text-muted">{d}</p>
             </div>
@@ -247,11 +293,11 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="border-t border-line bg-panel">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-14 md:flex-row md:items-center">
+      <section className="on-dark bg-chrome">
+        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-4 py-14 sm:px-6 md:flex-row md:items-center">
           <div>
-            <h2 className="text-2xl font-semibold">
-              See your own environment as an attacker would.
+            <h2 className="text-[28px] font-semibold leading-tight sm:text-[32px]">
+              Find the route before someone else does.
             </h2>
             <p className="mt-2 text-muted">
               Sign in, import an environment and get your first ranked paths in
@@ -260,7 +306,7 @@ export default function Landing() {
           </div>
           <Link
             to="/login"
-            className="inline-flex h-11 shrink-0 items-center gap-2 rounded bg-accent px-6 font-semibold text-bg hover:bg-accent-2"
+            className="inline-flex h-12 shrink-0 items-center gap-2 rounded-md bg-brand px-7 font-semibold text-on-brand transition-colors hover:bg-brand-2"
           >
             Sign in
             <ArrowRight size={16} />

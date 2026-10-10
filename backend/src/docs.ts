@@ -21,7 +21,7 @@ const OPS: [string, string, string, boolean][] = [
   ["get", "/projects", "List projects", true],
   ["post", "/projects", "Create a project", true],
   ["get", "/projects/{id}", "Project details", true],
-  ["patch", "/projects/{id}", "Rename a project", true],
+  ["patch", "/projects/{id}", "Rename a project or edit its description (null clears it)", true],
   ["delete", "/projects/{id}", "Delete a project", true],
   ["post", "/projects/{id}/import", "Validate and store an environment", true],
   ["post", "/projects/{id}/scan", "Run the deterministic analysis", true],
@@ -33,6 +33,12 @@ const OPS: [string, string, string, boolean][] = [
     "get",
     "/projects/{id}/attack-paths",
     "Attack paths with risk, ranks and ATT&CK mapping",
+    true,
+  ],
+  [
+    "get",
+    "/projects/{id}/audit-logs",
+    "Recent activity on a project (imports, scans, finding changes)",
     true,
   ],
   [

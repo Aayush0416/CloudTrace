@@ -1,8 +1,10 @@
 import {
+  BaseEdge,
   Handle,
   MarkerType,
   Position,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -22,7 +24,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { layoutGraph, type Dir } from "../../lib/graphLayout";
+import { layoutGraph, type Dir, type Pt } from "../../lib/graphLayout";
 import {
   SEV_ORDER,
   type AttackPath,
@@ -46,23 +48,23 @@ export const visibleGraph = (g: GraphData): GraphData => {
   };
 };
 
-export const SELECT = "#ffffff",
-  NEUTRAL = "#34507f";
+export const SELECT = "var(--graph-select)",
+  NEUTRAL = "var(--graph-neutral)";
 /** Relationship type decides the line style (same idea as a risk graph legend). Severity decides weight and brightness. */
 export const EDGE_STYLE: Record<
   string,
   { color: string; dash?: string; label: string }
 > = {
-  reaches: { color: "#ff4d4f", dash: "2 5", label: "Internet exposure" },
+  reaches: { color: "var(--color-crit)", dash: "2 5", label: "Internet exposure" },
   connects_to: {
-    color: "#fca311",
+    color: "var(--edge-lateral)",
     dash: "2 5",
     label: "Possible lateral movement",
   },
-  can_access: { color: "#22c8e8", label: "Access to resources" },
-  uses: { color: "#8a96ad", label: "Identity use" },
-  assumes: { color: "#8a96ad", label: "Identity use" },
-  trusts: { color: "#8a96ad", label: "Identity use" },
+  can_access: { color: "var(--edge-access)", label: "Access to resources" },
+  uses: { color: "var(--edge-identity)", label: "Identity use" },
+  assumes: { color: "var(--edge-identity)", label: "Identity use" },
+  trusts: { color: "var(--edge-identity)", label: "Identity use" },
 };
 const ICONS: Record<string, LucideIcon> = {
   entry: Globe,
@@ -93,19 +95,19 @@ const TYPE_LABEL: Record<string, string> = {
   load_balancer: "Load balancer",
   internet: "Internet",
 };
-const typeLabel = (sub: string) =>
+export const typeLabel = (sub: string) =>
   TYPE_LABEL[sub] ??
   sub.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 /** Icon tint encodes resource type; ring colour encodes the highest risk of any path through the resource. */
 export const TINT: Record<string, string> = {
-  entry: "#e5e5e5",
-  compute: "#6ea8fe",
-  identity: "#c4a1ff",
-  storage: "#5fd3a1",
-  database: "#ff8fa3",
-  secret: "#f4c95d",
-  api: "#7bdff2",
-  network: "#97a3ba",
+  entry: "var(--type-entry)",
+  compute: "var(--type-compute)",
+  identity: "var(--type-identity)",
+  storage: "var(--type-storage)",
+  database: "var(--type-database)",
+  secret: "var(--type-secret)",
+  api: "var(--type-api)",
+  network: "var(--type-network)",
 };
 
 export interface NData {
@@ -115,6 +117,8 @@ export interface NData {
   ring: string;
   tint: string;
   dim: boolean;
+  /** Not connected to the hovered element: slightly faded, never hidden. */
+  soft?: boolean;
   star: boolean;
   exposed: boolean;
   dir: Dir;
@@ -135,7 +139,7 @@ export function ResourceNode({ data }: NodeProps) {
   const h = "pointer-events-none !h-1 !w-1 !border-0 !bg-transparent";
   return (
     <div
-      className={`relative ${d.dim ? "opacity-25" : ""}`}
+      className={`relative transition-opacity duration-150 ${d.dim ? "opacity-25" : d.soft ? "opacity-60" : ""}`}
       style={{ width: d.size, height: d.size }}
     >
       <Handle
@@ -146,20 +150,22 @@ export function ResourceNode({ data }: NodeProps) {
       <div
         style={{
           borderColor: entry ? "transparent" : d.ring,
-          background: entry ? "#e5e5e5" : `${d.tint}1f`,
+          background: entry
+            ? "var(--type-entry)"
+            : `color-mix(in srgb, ${d.tint} 20%, var(--color-panel))`,
           borderWidth: d.size > 48 ? 3 : 2,
         }}
         className="flex h-full w-full items-center justify-center rounded-full border-solid"
       >
         <Icon
           size={Math.round(d.size * 0.44)}
-          style={{ color: entry ? "#000" : d.tint }}
+          style={{ color: entry ? "var(--on-entry)" : d.tint }}
         />
       </div>
       {d.star && (
         <span
           title="Sensitive resource"
-          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-black text-accent"
+          className="absolute -left-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-bg text-accent"
         >
           <Star size={11} fill="currentColor" />
         </span>
@@ -167,30 +173,33 @@ export function ResourceNode({ data }: NodeProps) {
       {d.exposed && (
         <span
           title="Reachable from the internet"
-          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-black text-crit"
+          className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-bg text-crit"
         >
           <AlertTriangle
             size={12}
             fill="currentColor"
-            className="text-crit [&>*]:stroke-black"
+            className="text-crit [&>*]:stroke-[var(--color-bg)]"
           />
         </span>
       )}
       {d.choke > 0 && (
         <span
           title={`${d.choke} attack paths pass through this resource`}
-          className="absolute -bottom-1 -right-3.5 rounded bg-accent px-1 text-[10px] font-semibold leading-4 text-bg"
+          className="absolute -bottom-1 -right-3.5 rounded bg-brand px-1 text-[10px] font-semibold leading-4 text-on-brand"
         >
           ×{d.choke}
         </span>
       )}
-      <div className="pointer-events-none absolute left-1/2 top-full mt-1.5 w-36 -translate-x-1/2 text-center">
-        <div className="truncate text-xs font-semibold text-white">
-          {d.type === "entry" ? "Internet" : typeLabel(d.subtype)}
+      <div className="pointer-events-none absolute left-1/2 top-full mt-1.5 flex w-40 -translate-x-1/2 justify-center">
+        {/* the pill keeps lines that pass behind the label from cutting through the text */}
+        <div className="max-w-full rounded bg-bg/90 px-1.5 py-0.5 text-center">
+          <div className="truncate text-xs font-semibold text-heading">
+            {d.type === "entry" ? "Internet" : typeLabel(d.subtype)}
+          </div>
+          {d.type !== "entry" && (
+            <div className="truncate text-[11px] text-muted">{d.label}</div>
+          )}
         </div>
-        {d.type !== "entry" && (
-          <div className="truncate text-[11px] text-muted">{d.label}</div>
-        )}
       </div>
       <Handle
         type="source"
@@ -200,6 +209,76 @@ export function ResourceNode({ data }: NodeProps) {
     </div>
   );
 }
+/**
+ * Edge drawn through the lanes the layout reserved for it. Each hop is a cubic curve with tangents along the layer axis,
+ * so lines leave and enter nodes straight, change lanes smoothly, and never cut across other nodes.
+ */
+export function RoutedEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  data,
+  markerEnd,
+  style,
+  label,
+  labelStyle,
+  labelBgStyle,
+  labelBgPadding,
+  labelBgBorderRadius,
+  interactionWidth,
+}: EdgeProps) {
+  const d = (data ?? {}) as { points?: Pt[]; dir?: Dir; offset?: number };
+  const vertical = d.dir === "TB",
+    off = d.offset ?? 0;
+  const pts: Pt[] = [
+    { x: sourceX, y: sourceY },
+    ...(d.points ?? []).map((p) => ({
+      x: vertical ? p.x + off : p.x,
+      y: vertical ? p.y : p.y + off,
+    })),
+    { x: targetX, y: targetY },
+  ];
+  const seg = (a: Pt, b: Pt) => {
+    const span = Math.abs(vertical ? b.y - a.y : b.x - a.x),
+      k = Math.max(span * 0.5, 48);
+    const sign = (vertical ? b.y - a.y : b.x - a.x) >= 0 ? 1 : 1;
+    return vertical
+      ? { c1: { x: a.x + off, y: a.y + k * sign }, c2: { x: b.x + off, y: b.y - k * sign } }
+      : { c1: { x: a.x + k * sign, y: a.y + off }, c2: { x: b.x - k * sign, y: b.y + off } };
+  };
+  let path = `M ${pts[0].x} ${pts[0].y}`;
+  const segs = pts.slice(1).map((b, i) => ({ a: pts[i], b, ...seg(pts[i], b) }));
+  for (const s of segs)
+    path += ` C ${s.c1.x} ${s.c1.y}, ${s.c2.x} ${s.c2.y}, ${s.b.x} ${s.b.y}`;
+  // label sits on a lane point, or at the middle of the single curve
+  let lx: number, ly: number;
+  if (segs.length % 2 === 0) {
+    lx = pts[segs.length / 2].x;
+    ly = pts[segs.length / 2].y;
+  } else {
+    const m = segs[(segs.length - 1) / 2];
+    lx = (m.a.x + 3 * m.c1.x + 3 * m.c2.x + m.b.x) / 8;
+    ly = (m.a.y + 3 * m.c1.y + 3 * m.c2.y + m.b.y) / 8;
+  }
+  return (
+    <BaseEdge
+      path={path}
+      labelX={lx}
+      labelY={ly}
+      label={label}
+      labelStyle={labelStyle}
+      labelBgStyle={labelBgStyle}
+      labelBgPadding={labelBgPadding}
+      labelBgBorderRadius={labelBgBorderRadius}
+      markerEnd={markerEnd}
+      style={style}
+      interactionWidth={interactionWidth ?? 16}
+    />
+  );
+}
+export const edgeTypes = { routed: RoutedEdge };
+
 export const nodeTypes = { resource: ResourceNode };
 
 export interface FlowOpts {
@@ -215,6 +294,8 @@ export interface FlowOpts {
   showAll: boolean;
   mode: "all" | "critical";
   keep?: Set<string>;
+  /** Turns off the animated dash on the selected path. */
+  reduceMotion?: boolean;
 }
 
 /**
@@ -236,6 +317,7 @@ export function buildFlow(o: FlowOpts): { nodes: Node[]; edges: Edge[] } {
     showAll,
     mode,
     keep,
+    reduceMotion,
   } = o;
   const nodeSev = new Map<string, Severity>(),
     edgeSev = new Map<string, Severity>();
@@ -251,12 +333,22 @@ export function buildFlow(o: FlowOpts): { nodes: Node[]; edges: Edge[] } {
     ),
     uNodes = new Set(urgent.flatMap((p) => p.nodes)),
     uEdges = new Set(urgent.flatMap((p) => p.edges.map((e) => e.key)));
-  const pos = layoutGraph(
+  const { pos, routes } = layoutGraph(
       g,
       dir,
       keep ?? (showAll ? undefined : new Set(all.flatMap((p) => p.nodes))),
-    ),
-    targets = new Set(all.map((p) => p.target));
+    );
+  const targets = new Set(all.map((p) => p.target));
+  // Several edges between the same two resources (for example read and admin) are fanned out a little so each stays visible.
+  const pairs = new Map<string, string[]>();
+  for (const e of g.edges) {
+    const k = [e.source, e.target].sort().join("|");
+    (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(e.id);
+  }
+  const fan = (e: GraphEdge) => {
+    const list = pairs.get([e.source, e.target].sort().join("|"))!;
+    return (list.indexOf(e.id) - (list.length - 1) / 2) * 10;
+  };
   const hoodSet = hood
     ? new Set([
         hood,
@@ -318,11 +410,15 @@ export function buildFlow(o: FlowOpts): { nodes: Node[]; edges: Edge[] } {
           ? SELECT
           : sev && (!crit || uNodes.has(n.id))
             ? SEV[sev].hex
-            : `${tint}99`;
+            : `color-mix(in srgb, ${tint} 60%, transparent)`;
         return {
           id: n.id,
           type: "resource",
-          position: pos.get(n.id)!,
+          // layout gives centres; React Flow wants the top-left corner
+          position: {
+            x: pos.get(n.id)!.x - size / 2,
+            y: pos.get(n.id)!.y - size / 2,
+          },
           initialWidth: size,
           initialHeight: size,
           data: {
@@ -361,19 +457,19 @@ export function buildFlow(o: FlowOpts): { nodes: Node[]; edges: Edge[] } {
         const opacity =
           focusing && !on
             ? 0.1
-            : sev === "critical"
+            : sev === "critical" || sev === "high"
               ? 1
-              : sev === "high"
-                ? 0.95
-                : sev
-                  ? 0.75
-                  : 0.4;
+              : sev
+                ? 0.88
+                : 0.55;
         return {
           id: e.id,
           source: e.source,
           target: e.target,
-          type: "default",
-          animated: sel,
+          type: "routed",
+          data: { points: routes.get(e.id) ?? [], dir, offset: fan(e) },
+          zIndex: sel ? 20 : sev === "critical" ? 4 : sev === "high" ? 3 : sev ? 2 : 1,
+          animated: sel && !reduceMotion,
           label:
             on && (selE || hoodSet)
               ? `${e.relationship.replace("_", " ")}${e.action ? ` (${e.action})` : ""}`
@@ -391,8 +487,8 @@ export function buildFlow(o: FlowOpts): { nodes: Node[]; edges: Edge[] } {
             strokeLinecap: "round",
             opacity,
           },
-          labelStyle: { fill: "#e5e5e5", fontSize: 11 },
-          labelBgStyle: { fill: "#000" },
+          labelStyle: { fill: "var(--color-fg)", fontSize: 11 },
+          labelBgStyle: { fill: "var(--graph-label-bg)" },
           labelBgPadding: [5, 3] as [number, number],
           labelBgBorderRadius: 3,
         };

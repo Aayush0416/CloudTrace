@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Background,
@@ -9,6 +9,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Node,
+  useStore,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -21,6 +22,7 @@ import {
   Search,
   Star,
   X,
+  Info,
 } from "lucide-react";
 import { errorInfo } from "../../lib/api";
 import { download } from "../../lib/download";
@@ -46,15 +48,102 @@ import {
   buildFlow,
   EDGE_STYLE,
   nodeTypes,
+  edgeTypes,
   visibleGraph,
   type NData,
 } from "./graphKit";
 import PathPanel from "./PathPanel";
+import { usePrefs } from "../../lib/prefs";
+import { useGraphHover } from "./GraphHover";
 
 const mapColor = (n: Node) => {
   const d = n.data as NData;
-  return d.dim ? "#22304f" : d.ring;
+  return d.dim ? "var(--color-line)" : d.ring;
 };
+/** The legend is one icon. It opens on hover (mouse), on tap or click, and with the keyboard; Escape closes it. */
+function Legend() {
+  const [pinned, setPinned] = useState(false),
+    [hover, setHover] = useState(false);
+  const open = pinned || hover;
+  useEffect(() => {
+    if (!pinned) return;
+    const h = (e: KeyboardEvent) => e.key === "Escape" && setPinned(false);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [pinned]);
+  const row = "flex items-center gap-2.5";
+  return (
+    <div
+      className="relative"
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHover(true)}
+      onPointerLeave={(e) => e.pointerType === "mouse" && setHover(false)}
+    >
+      {open && (
+        <div
+          id="graph-legend"
+          role="region"
+          aria-label="Graph legend"
+          className="absolute bottom-11 left-0 w-64 space-y-1.5 rounded-md border border-line bg-panel px-3 py-2.5 text-xs text-muted shadow-xl"
+        >
+          {(["reaches", "connects_to", "can_access", "uses"] as const).map(
+            (k) => (
+              <div key={k} className={row}>
+                <svg width="26" height="6" aria-hidden>
+                  <line
+                    x1="1"
+                    y1="3"
+                    x2="25"
+                    y2="3"
+                    stroke={EDGE_STYLE[k].color}
+                    strokeWidth="2"
+                    strokeDasharray={EDGE_STYLE[k].dash}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                {EDGE_STYLE[k].label}
+              </div>
+            ),
+          )}
+          <div className={row}>
+            <span className="flex w-[26px] justify-center text-accent">
+              <Star size={12} fill="currentColor" />
+            </span>
+            Sensitive resource
+          </div>
+          <div className={row}>
+            <span className="flex w-[26px] justify-center text-crit">
+              <AlertTriangle size={12} fill="currentColor" />
+            </span>
+            Internet exposure
+          </div>
+          <div className={row}>
+            <span className="flex w-[26px] justify-center">
+              <span className="rounded bg-brand px-1 text-[10px] font-semibold text-on-brand">
+                ×N
+              </span>
+            </span>
+            Many paths pass here
+          </div>
+          <div className="border-t border-line pt-1.5">
+            Ring colour = highest risk. Thicker line = critical or high.
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        aria-label="Graph legend"
+        aria-expanded={open}
+        aria-controls="graph-legend"
+        title="Legend"
+        onClick={() => setPinned((v) => !v)}
+        className={`flex h-9 w-9 items-center justify-center rounded-full border bg-panel shadow-md hover:border-accent hover:text-fg ${open ? "border-accent text-fg" : "border-line text-muted"}`}
+      >
+        <Info size={17} />
+      </button>
+    </div>
+  );
+}
+
 type Mode = "all" | "critical";
 interface CanvasProps {
   projectId: string;
@@ -92,9 +181,30 @@ function Canvas({
   onExport,
 }: CanvasProps) {
   const { fitView } = useReactFlow();
+  // The graph refits itself whenever the space it has changes (side panels opened, closed or dragged, window resized,
+  // phone rotated). Waits for the size to settle so dragging a panel edge does not cause a refit on every pixel.
+  const size = useStore((st) => `${Math.round(st.width)}x${Math.round(st.height)}`);
+  const lastSize = useRef(size);
+  const selectedRef = useRef<typeof selected>(null as typeof selected);
+  const { theme, reducedMotion } = usePrefs();
   const [showAll, setShowAll] = useState(true),
     [find, setFind] = useState(""),
     [mode, setMode] = usePersisted<Mode>("ct_graph_mode", "all");
+  selectedRef.current = selected;
+  useEffect(() => {
+    const before = lastSize.current;
+    lastSize.current = size;
+    if (before.startsWith("0x") || size.startsWith("0x") || before === size) return;
+    const t = setTimeout(() => {
+      const sel = selectedRef.current;
+      fitView(
+        sel
+          ? { nodes: sel.nodes.map((id) => ({ id })), padding: 0.35, duration: 250 }
+          : { padding: 0.22, duration: 250 },
+      );
+    }, 220);
+    return () => clearTimeout(t);
+  }, [size, fitView]);
   const { nodes, edges } = useMemo(
     () =>
       buildFlow({
@@ -109,6 +219,7 @@ function Canvas({
         dir,
         showAll,
         mode,
+        reduceMotion: reducedMotion,
       }),
     [
       g,
@@ -122,8 +233,10 @@ function Canvas({
       dir,
       showAll,
       mode,
+      reducedMotion,
     ],
   );
+  const { bind, tip } = useGraphHover({ g, resources, paths: all, choke });
   useEffect(() => {
     const t = setTimeout(() => fitView({ padding: 0.22, duration: 250 }), 40);
     return () => clearTimeout(t);
@@ -153,13 +266,17 @@ function Canvas({
     }
   };
   const seg = (active: boolean) =>
-    `flex h-7 items-center gap-1 whitespace-nowrap rounded px-2 text-xs ${active ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"}`;
+    `flex h-9 items-center gap-1 whitespace-nowrap rounded px-2.5 text-xs sm:h-7 sm:px-2 ${active ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"}`;
   return (
+    <>
+    {tip}
     <ReactFlow
+      {...bind}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      colorMode="dark"
+      edgeTypes={edgeTypes}
+      colorMode={theme}
       fitView
       fitViewOptions={{ padding: 0.22 }}
       minZoom={0.1}
@@ -170,7 +287,7 @@ function Canvas({
       onEdgeClick={(_, e) => onFocus({ kind: "edge", id: e.id })}
       onPaneClick={() => onFocus(null)}
     >
-      <Background color="#10182b" gap={26} />
+      <Background color="var(--graph-dots)" gap={26} />
       <Controls showInteractive={false} position="top-right" />
       <MiniMap
         pannable
@@ -181,14 +298,14 @@ function Canvas({
         nodeStrokeColor={mapColor}
         nodeStrokeWidth={4}
         nodeBorderRadius={20}
-        maskColor="rgba(0,0,0,0.72)"
-        maskStrokeColor="#fca311"
+        maskColor="var(--minimap-mask)"
+        maskStrokeColor="var(--color-accent)"
         maskStrokeWidth={1}
         style={{
           width: 200,
           height: 130,
-          background: "#0a0f1c",
-          border: "1px solid #22304f",
+          background: "var(--color-panel)",
+          border: "1px solid var(--color-line)",
           borderRadius: 6,
         }}
       />
@@ -221,7 +338,7 @@ function Canvas({
             onClick={() => setDir("LR")}
           >
             <ArrowLeftRight size={13} />
-            Horizontal
+            <span className="hidden sm:inline">Horizontal</span>
           </button>
           <button
             className={seg(dir === "TB")}
@@ -229,7 +346,7 @@ function Canvas({
             onClick={() => setDir("TB")}
           >
             <ArrowDownUp size={13} />
-            Vertical
+            <span className="hidden sm:inline">Vertical</span>
           </button>
           <span className="mx-1 h-4 w-px bg-line" />
           <label className="flex h-7 items-center gap-1.5 px-1 text-xs text-muted">
@@ -271,7 +388,7 @@ function Canvas({
             }}
           >
             <RotateCcw size={13} />
-            Reset
+            <span className="hidden sm:inline">Reset</span>
           </button>
           <button
             className={seg(false)}
@@ -279,7 +396,7 @@ function Canvas({
             onClick={onImmersive}
           >
             <Maximize2 size={13} />
-            Focus
+            <span className="hidden sm:inline">Focus</span>
           </button>
           <button
             className={seg(false)}
@@ -287,63 +404,21 @@ function Canvas({
             onClick={onExport}
           >
             <Download size={13} />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
           <Link
             to={`/p/${projectId}/remediation`}
-            className="flex h-7 items-center rounded bg-accent px-3 text-xs font-semibold text-bg hover:bg-accent-2"
+            className="flex h-7 items-center rounded bg-brand px-3 text-xs font-semibold text-on-brand hover:bg-brand-2"
           >
             Remediate
           </Link>
         </div>
       </Panel>
       <Panel position="bottom-left">
-        <div className="space-y-1 rounded-md border border-line bg-panel/90 px-3 py-2.5 text-xs text-muted">
-          {(["reaches", "connects_to", "can_access", "uses"] as const).map(
-            (k) => (
-              <div key={k} className="flex items-center gap-2.5">
-                <svg width="26" height="6" aria-hidden>
-                  <line
-                    x1="1"
-                    y1="3"
-                    x2="25"
-                    y2="3"
-                    stroke={EDGE_STYLE[k].color}
-                    strokeWidth="2"
-                    strokeDasharray={EDGE_STYLE[k].dash}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                {EDGE_STYLE[k].label}
-              </div>
-            ),
-          )}
-          <div className="flex items-center gap-2.5">
-            <span className="flex w-[26px] justify-center text-accent">
-              <Star size={12} fill="currentColor" />
-            </span>
-            Sensitive resource
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="flex w-[26px] justify-center text-crit">
-              <AlertTriangle size={12} fill="currentColor" />
-            </span>
-            Internet exposure
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span className="flex w-[26px] justify-center">
-              <span className="rounded bg-accent px-1 text-[10px] font-semibold text-bg">
-                ×N
-              </span>
-            </span>
-            Many paths pass here
-          </div>
-          <div className="border-t border-line pt-1.5">
-            Ring colour = highest risk. Thicker line = critical or high.
-          </div>
-        </div>
+        <Legend />
       </Panel>
     </ReactFlow>
+    </>
   );
 }
 
@@ -359,7 +434,8 @@ export default function Explorer() {
     [target, setTarget] = useState(""),
     [maxLen, setMaxLen] = useState(0),
     [scope, setScope] = useState("");
-  const [dir, setDir] = usePersisted<Dir>("ct_graph_dir", "LR"),
+  const { prefs } = usePrefs();
+  const [dir, setDir] = usePersisted<Dir>("ct_graph_dir", prefs.graphDir),
     [left, setLeft] = usePersisted("ct_left_collapsed", false),
     [right, setRight] = usePersisted("ct_right_collapsed", false);
   const [focus, setFocus] = useState<{
@@ -430,7 +506,7 @@ export default function Explorer() {
     all.filter((p) => p.risk.severity === s).length;
 
   return (
-    <div className="flex h-full">
+    <div className="flex min-h-full flex-col lg:h-full lg:flex-row">
       <SidePanel
         side="left"
         id="explorer-left"
@@ -572,7 +648,10 @@ export default function Explorer() {
         )}
       </SidePanel>
 
-      <div className="min-w-0 flex-1" aria-label="Attack graph">
+      <div
+        className="order-first h-[64vh] min-h-[380px] min-w-0 shrink-0 lg:order-none lg:h-auto lg:min-h-0 lg:flex-1 lg:shrink"
+        aria-label="Attack graph"
+      >
         <ReactFlowProvider>
           <Canvas
             key={graph.data!.scanId}
@@ -619,6 +698,7 @@ export default function Explorer() {
         max={640}
         collapsed={right}
         onToggle={() => setRight((v) => !v)}
+        openOnChange={selected?.id ?? focus?.id ?? null}
       >
         {focus && (
           <div className="border-b border-line p-3">

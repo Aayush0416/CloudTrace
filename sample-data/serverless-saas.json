@@ -1,0 +1,144 @@
+{
+ "name": "serverless-saas",
+ "provider": "aws",
+ "resources": [
+  {
+   "id": "api-gw",
+   "type": "api",
+   "subtype": "api_gateway",
+   "name": "saas-public-api",
+   "public": true,
+   "criticality": "medium",
+   "relationships": [
+    {
+     "type": "connects_to",
+     "target": "lambda-auth"
+    },
+    {
+     "type": "connects_to",
+     "target": "lambda-orders"
+    },
+    {
+     "type": "connects_to",
+     "target": "lambda-export"
+    }
+   ]
+  },
+  {
+   "id": "lambda-auth",
+   "type": "compute",
+   "subtype": "lambda",
+   "name": "auth-handler",
+   "relationships": [
+    {
+     "type": "uses",
+     "target": "role-auth"
+    }
+   ]
+  },
+  {
+   "id": "lambda-orders",
+   "type": "compute",
+   "subtype": "lambda",
+   "name": "orders-handler",
+   "relationships": [
+    {
+     "type": "uses",
+     "target": "role-orders"
+    }
+   ]
+  },
+  {
+   "id": "lambda-export",
+   "type": "compute",
+   "subtype": "lambda",
+   "name": "report-export-handler",
+   "relationships": [
+    {
+     "type": "uses",
+     "target": "role-export"
+    }
+   ]
+  },
+  {
+   "id": "role-auth",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "auth-lambda-role",
+   "permissions": [
+    {
+     "action": "read",
+     "target": "secret-jwt-key"
+    },
+    {
+     "action": "read",
+     "target": "ddb-users"
+    }
+   ]
+  },
+  {
+   "id": "role-orders",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "orders-lambda-role",
+   "permissions": [
+    {
+     "action": "write",
+     "target": "ddb-orders"
+    },
+    {
+     "action": "read",
+     "target": "ddb-users"
+    }
+   ]
+  },
+  {
+   "id": "role-export",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "export-lambda-role",
+   "permissions": [
+    {
+     "action": "admin",
+     "target": "ddb-orders"
+    },
+    {
+     "action": "read",
+     "target": "s3-invoices"
+    },
+    {
+     "action": "read",
+     "target": "ddb-users"
+    }
+   ]
+  },
+  {
+   "id": "ddb-users",
+   "type": "database",
+   "subtype": "dynamodb",
+   "name": "users-table",
+   "criticality": "critical"
+  },
+  {
+   "id": "ddb-orders",
+   "type": "database",
+   "subtype": "dynamodb",
+   "name": "orders-table",
+   "criticality": "high"
+  },
+  {
+   "id": "s3-invoices",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "customer-invoices",
+   "criticality": "high"
+  },
+  {
+   "id": "secret-jwt-key",
+   "type": "secret",
+   "subtype": "secrets_manager",
+   "name": "jwt-signing-key",
+   "criticality": "critical"
+  }
+ ]
+}

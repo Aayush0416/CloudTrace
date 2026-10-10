@@ -12,6 +12,23 @@ const SAMPLES = [
   ["safe", "Safe: private resources, no exposed paths"],
   ["medium", "Medium: public server to storage"],
   ["critical", "Critical: public server to production database"],
+  [
+    "ssrf-over-privileged-role",
+    "SSRF: public proxy with an admin role on customer data",
+  ],
+  [
+    "ssrf-over-privileged-role-fixed",
+    "SSRF (fixed): same environment after remediation",
+  ],
+  [
+    "public-storage-and-leaked-key",
+    "Public bucket and database plus a leaked access key",
+  ],
+  ["cicd-supply-chain", "CI/CD: stolen pipeline credential and role chaining"],
+  [
+    "serverless-saas",
+    "Serverless SaaS: public API and broad Lambda roles",
+  ],
 ] as const;
 
 export default function ImportDialog({

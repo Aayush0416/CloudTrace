@@ -1,29 +1,42 @@
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Loader2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Inbox,
+  Loader2,
+  X,
+} from "lucide-react";
 import { SEV_ORDER, type Severity } from "../lib/types";
 
 export const SEV: Record<
   Severity,
   { label: string; chip: string; hex: string }
 > = {
-  critical: { label: "Critical", chip: "bg-crit/15 text-crit", hex: "#ff4d4f" },
-  high: { label: "High", chip: "bg-high/15 text-high", hex: "#ff7a59" },
-  medium: { label: "Medium", chip: "bg-med/15 text-med", hex: "#b388ff" },
-  low: { label: "Low", chip: "bg-low/15 text-low", hex: "#4da3ff" },
-  info: { label: "Info", chip: "bg-info/15 text-info", hex: "#97a3ba" },
+  critical: { label: "Critical", chip: "bg-crit/15 text-crit", hex: "var(--color-crit)" },
+  high: { label: "High", chip: "bg-high/15 text-high", hex: "var(--color-high)" },
+  medium: { label: "Medium", chip: "bg-med/15 text-med", hex: "var(--color-med)" },
+  low: { label: "Low", chip: "bg-low/15 text-low", hex: "var(--color-low)" },
+  info: { label: "Info", chip: "bg-info/15 text-info", hex: "var(--color-info)" },
 };
 export const SeverityBadge = ({ s }: { s: Severity }) => (
   <span
-    className={`inline-flex h-5 items-center rounded px-1.5 text-xs font-medium ${SEV[s].chip}`}
+    className={`inline-flex h-5 items-center gap-1.5 rounded-full px-2 text-xs font-medium ${SEV[s].chip}`}
   >
+    <span
+      className="h-1.5 w-1.5 rounded-full"
+      style={{ background: SEV[s].hex }}
+      aria-hidden
+    />
     {SEV[s].label}
   </span>
 );
 
 const variants = {
-  primary: "bg-accent text-bg hover:bg-accent-2 font-semibold",
+  primary:
+    "bg-brand text-on-brand shadow-sm hover:bg-brand-2 font-semibold",
   secondary:
-    "border border-line bg-raised hover:border-navy-700 hover:bg-navy-700/40",
+    "border border-line bg-panel font-medium shadow-[var(--card-shadow)] hover:border-navy-700 hover:bg-raised",
   ghost: "text-muted hover:bg-raised hover:text-fg",
   danger: "bg-crit text-white hover:bg-crit/90 font-semibold",
 };
@@ -41,7 +54,7 @@ export function Button({
     <button
       {...p}
       disabled={p.disabled || busy}
-      className={`inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md px-3.5 text-sm transition-[background-color,border-color,color,transform] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 ${variants[variant]} ${className}`}
     >
       {busy && <Loader2 size={14} className="animate-spin" />}
       {children}
@@ -59,10 +72,12 @@ export const Card = ({
   children: ReactNode;
   className?: string;
 }) => (
-  <section className={`rounded-md border border-line bg-panel ${className}`}>
+  <section
+    className={`rounded-lg border border-line bg-panel shadow-[var(--card-shadow)] ${className}`}
+  >
     {title && (
-      <header className="flex h-11 items-center justify-between border-b border-line px-4">
-        <h2 className="text-sm font-semibold">{title}</h2>
+      <header className="flex h-12 items-center justify-between rounded-t-lg border-b border-line bg-[var(--card-head)] px-4">
+        <h2 className="text-[15px] font-semibold">{title}</h2>
         {actions}
       </header>
     )}
@@ -101,7 +116,10 @@ export const EmptyState = ({
   action?: ReactNode;
 }) => (
   <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-    <div className="text-sm font-semibold">{title}</div>
+    <span className="mb-1 flex h-11 w-11 items-center justify-center rounded-full bg-raised text-muted">
+      <Inbox size={20} />
+    </span>
+    <div className="text-[15px] font-semibold">{title}</div>
     <p className="max-w-sm text-muted">{body}</p>
     {action && <div className="mt-2">{action}</div>}
   </div>
@@ -122,7 +140,7 @@ export const Field = ({
   </label>
 );
 export const inputCls =
-  "w-full min-h-8 rounded border border-line bg-bg px-2.5 py-1 text-sm placeholder:text-muted/70 focus:border-accent focus:outline-none";
+  "w-full min-h-9 rounded-md border border-line bg-bg px-3 py-1 text-sm placeholder:text-muted/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:min-h-8";
 export function Modal({
   title,
   onClose,
@@ -136,13 +154,13 @@ export function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[var(--overlay)] p-3 sm:items-center sm:p-4"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
         role="dialog"
         aria-label={title}
-        className={`w-full ${wide ? "max-w-xl" : "max-w-md"} rounded-md border border-line bg-panel shadow-2xl`}
+        className={`max-h-[92vh] w-full overflow-auto ${wide ? "max-w-xl" : "max-w-md"} rounded-xl border border-line bg-panel shadow-2xl`}
       >
         <header className="flex h-12 items-center justify-between border-b border-line px-5">
           <h2 className="font-semibold">{title}</h2>
@@ -168,12 +186,12 @@ export const PageHeader = ({
   sub?: ReactNode;
   actions?: ReactNode;
 }) => (
-  <div className="mb-6 flex items-start justify-between gap-4">
-    <div>
-      <h1 className="text-2xl font-semibold">{title}</h1>
+  <div className="mb-5 flex flex-col gap-3 border-b border-line/70 pb-5 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <div className="min-w-0">
+      <h1 className="text-[26px] leading-tight sm:text-[30px]">{title}</h1>
       {sub && <div className="mt-1 text-muted">{sub}</div>}
     </div>
-    <div className="flex gap-2">{actions}</div>
+    <div className="flex flex-wrap gap-2">{actions}</div>
   </div>
 );
 export const Kpi = ({
@@ -196,13 +214,13 @@ export const Kpi = ({
       ? null
       : delta < 0 === (goodWhen === "down");
   return (
-    <div className="rounded-md border border-line bg-panel p-4">
-      <div className="flex items-center justify-between text-muted">
+    <div className="kpi rounded-lg border border-line bg-panel p-4 shadow-[var(--card-shadow)]">
+      <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-muted">
         {label}
         {icon}
       </div>
       <div
-        className={`mt-2 text-[28px] font-semibold leading-none ${tone ?? ""}`}
+        className={`mt-2.5 text-[28px] font-semibold leading-none sm:text-[32px] ${tone ?? ""}`}
       >
         {value}
       </div>
@@ -261,12 +279,12 @@ export function DataTable<T>({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
-        <thead className="text-muted">
+        <thead className="bg-raised/40 text-muted">
           <tr className="border-b border-line">
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`h-10 whitespace-nowrap px-4 font-medium ${c.className ?? ""}`}
+                className={`h-10 whitespace-nowrap px-4 text-xs font-semibold uppercase tracking-wide ${c.className ?? ""}`}
               >
                 {c.sort ? (
                   <button
@@ -298,7 +316,7 @@ export function DataTable<T>({
             <tr
               key={rowKey(r)}
               onClick={() => onRowClick?.(r)}
-              className={`border-b border-line/60 last:border-0 ${onRowClick ? "cursor-pointer hover:bg-raised" : ""}`}
+              className={`border-b border-line/60 transition-colors last:border-0 hover:bg-raised/40 ${onRowClick ? "cursor-pointer hover:bg-raised/70" : ""}`}
             >
               {cols.map((c) => (
                 <td
@@ -333,7 +351,7 @@ export function Tabs<T extends string>({
           role="tab"
           aria-selected={value === t.id}
           onClick={() => onChange(t.id)}
-          className={`-mb-px h-10 border-b-2 px-3 ${value === t.id ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
+          className={`-mb-px h-11 border-b-2 px-3.5 font-medium transition-colors ${value === t.id ? "border-accent text-heading" : "border-transparent text-muted hover:text-fg"}`}
         >
           {t.label}
         </button>

@@ -5,7 +5,8 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { useIsMobile } from "../lib/prefs";
 
 export function usePersisted<T>(key: string, init: T) {
   const [v, setV] = useState<T>(() => {
@@ -36,6 +37,7 @@ export function SidePanel({
   max,
   collapsed,
   onToggle,
+  openOnChange,
   children,
 }: {
   side: "left" | "right";
@@ -46,8 +48,15 @@ export function SidePanel({
   max: number;
   collapsed: boolean;
   onToggle: () => void;
+  /** On phones the panel is an accordion; it opens by itself when this value changes to something truthy. */
+  openOnChange?: unknown;
   children: ReactNode;
 }) {
+  const mobile = useIsMobile(),
+    [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (openOnChange) setOpen(true);
+  }, [openOnChange]);
   const [w, setW] = usePersisted(`ct_panel_${id}`, defaultWidth);
   const clamp = (x: number) => Math.min(max, Math.max(min, x)),
     sign = side === "left" ? 1 : -1;
@@ -75,6 +84,28 @@ export function SidePanel({
   const Collapse = side === "left" ? ChevronsLeft : ChevronsRight,
     Expand = side === "left" ? ChevronsRight : ChevronsLeft;
   const border = side === "left" ? "border-r" : "border-l";
+  if (mobile)
+    return (
+      <section aria-label={title} className="border-t border-line bg-panel">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="flex h-12 w-full items-center justify-between px-4 text-left font-semibold"
+        >
+          {title}
+          <ChevronDown
+            size={18}
+            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {open && (
+          <div className="max-h-[75vh] overflow-auto border-t border-line">
+            {children}
+          </div>
+        )}
+      </section>
+    );
   if (collapsed)
     return (
       <aside

@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Bot, Send, User } from "lucide-react";
 import { errorInfo } from "../../lib/api";
-import { useAssistant, useAuthConfig, useProject } from "../../lib/queries";
+import { useAssistant, useProject } from "../../lib/queries";
 import type { ChatReply } from "../../lib/types";
 import {
   Button,
-  ModeBadge,
   EmptyState,
   inputCls,
   Loading,
@@ -29,9 +28,7 @@ export default function Assistant() {
   const id = useParams().projectId!,
     nav = useNavigate(),
     project = useProject(id),
-    ask = useAssistant(id),
-    cfg = useAuthConfig(),
-    llm = cfg.data?.ai === "llm";
+    ask = useAssistant(id);
   const [msgs, setMsgs] = useState<Msg[]>([]),
     [text, setText] = useState(""),
     end = useRef<HTMLDivElement>(null);
@@ -77,13 +74,7 @@ export default function Assistant() {
       <PageHeader
         title="Security Advisor"
         sub="Ask about this project's attack paths, exposure and fixes."
-        actions={<ModeBadge mode={llm ? "advanced" : "standard"} />}
       />
-      <div className="mb-3 rounded border border-line bg-panel px-3 py-2 text-muted">
-        {llm
-          ? "Answers come from a language model that reads your scan results through tools. It can only cite what the deterministic engine found."
-          : "Standard mode: answers come from a built-in engine that reads your scan results, so it handles a fixed set of questions. Add an API key on the server to enable advanced mode."}
-      </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-auto rounded border border-line bg-panel p-3">
         {!msgs.length && (
           <div className="space-y-2">

@@ -44,14 +44,14 @@ import {
 } from "../../components/ui";
 import ImportDialog from "../projects/ImportDialog";
 
-const axis = { stroke: "#97a3ba", fontSize: 11 };
+const axis = { stroke: "var(--color-muted)", fontSize: 11 };
 const tip = {
   contentStyle: {
-    background: "#14213d",
-    border: "1px solid #22304f",
+    background: "var(--color-raised)",
+    border: "1px solid var(--color-line)",
     fontSize: 12,
   },
-  cursor: { fill: "#fca31110" },
+  cursor: { fill: "color-mix(in srgb, var(--color-accent) 10%, transparent)" },
 };
 
 export default function Overview() {
@@ -180,7 +180,7 @@ export default function Overview() {
               <div className="h-48 p-3">
                 <ResponsiveContainer>
                   <BarChart data={sevCounts}>
-                    <CartesianGrid stroke="#22304f" vertical={false} />
+                    <CartesianGrid stroke="var(--color-line)" vertical={false} />
                     <XAxis dataKey="label" {...axis} />
                     <YAxis allowDecimals={false} {...axis} />
                     <Tooltip {...tip} />
@@ -203,20 +203,20 @@ export default function Overview() {
                 <div className="h-48 p-3">
                   <ResponsiveContainer>
                     <LineChart data={trend}>
-                      <CartesianGrid stroke="#22304f" vertical={false} />
+                      <CartesianGrid stroke="var(--color-line)" vertical={false} />
                       <XAxis dataKey="n" {...axis} />
                       <YAxis allowDecimals={false} {...axis} />
                       <Tooltip {...tip} />
                       <Line
                         dataKey="paths"
                         name="Attack paths"
-                        stroke="#fca311"
+                        stroke="var(--color-accent)"
                         dot
                       />
                       <Line
                         dataKey="critical"
                         name="Critical paths"
-                        stroke="#ff4d4f"
+                        stroke="var(--color-crit)"
                         dot
                       />
                     </LineChart>
@@ -240,12 +240,12 @@ export default function Overview() {
                         onClick={() => nav(`/p/${id}/attack-paths`)}
                         className="flex w-full items-center gap-3 rounded px-2 py-2 text-left hover:bg-raised"
                       >
-                        <span className="w-36 shrink-0 truncate font-medium">
+                        <span className="w-28 shrink-0 truncate font-medium sm:w-36">
                           {name(c.id)}
                         </span>
                         <span className="h-1.5 flex-1 rounded bg-raised">
                           <span
-                            className="block h-full rounded bg-accent"
+                            className="block h-full rounded bg-brand"
                             style={{ width: `${c.share * 100}%` }}
                           />
                         </span>
@@ -297,7 +297,7 @@ export default function Overview() {
                   <ul className="space-y-1">
                     {diff.data.newPaths.slice(0, 3).map((x) => (
                       <li
-                        key={x.nodes.join()}
+                        key={x.id}
                         className="flex items-center gap-2"
                       >
                         <SeverityBadge s={x.severity} />
@@ -308,7 +308,7 @@ export default function Overview() {
                     ))}
                     {diff.data.resolvedPaths.slice(0, 3).map((x) => (
                       <li
-                        key={x.nodes.join()}
+                        key={x.id}
                         className="flex items-center gap-2 text-ok"
                       >
                         <span className="truncate">

@@ -1,4 +1,4 @@
-import type { Environment, Resource } from "../parser";
+import { ingressOf, openPortsOf, sgsOf, type Environment, type Resource } from "../parser";
 
 export type Severity = "info" | "low" | "medium" | "high" | "critical";
 export interface Finding {
@@ -17,8 +17,9 @@ export interface Rule {
   ): Omit<Finding, "ruleId" | "resourceId"> | null;
 }
 
+const EMPTY = { properties: {} } as Resource;
 const byId = (env: Environment, id: string) =>
-  env.resources.find((r) => r.id === id)!;
+  env.resources.find((r) => r.id === id) ?? EMPTY;
 const isHigh = (c: string) => c === "high" || c === "critical";
 
 export const RULES: Rule[] = [
@@ -50,20 +51,13 @@ export const RULES: Rule[] = [
     id: "NET-003",
     category: "network",
     check: (r, env) => {
-      const sgPorts = (
-        (r.properties.securityGroups as string[] | undefined) ?? []
-      )
-        .flatMap(
-          (id) =>
-            (byId(env, id).properties.ingress as
-              { port: number; source: string }[] | undefined) ?? [],
-        )
+      const sgPorts = sgsOf(r)
+        .flatMap((id) => ingressOf(byId(env, id)))
         .filter((i) => i.source === "internet")
         .map((i) => i.port);
-      const ports = [
-        ...((r.properties.openPorts as number[] | undefined) ?? []),
-        ...sgPorts,
-      ].filter((p) => p === 22 || p === 3389);
+      const ports = [...openPortsOf(r), ...sgPorts].filter(
+        (p) => p === 22 || p === 3389,
+      );
       return r.public && ports.length
         ? {
             title: "Open management access from internet",
@@ -151,8 +145,8 @@ export const RULES: Rule[] = [
     category: "network",
     check: (r) => {
       const open =
-        r.subtype === "security_group" && Array.isArray(r.properties.ingress)
-          ? (r.properties.ingress as { port: number; source: string }[]).filter(
+        r.subtype === "security_group"
+          ? ingressOf(r).filter(
               (i) => i.source === "internet" && ![80, 443].includes(i.port),
             )
           : [];
@@ -172,23 +166,12 @@ export const RULES: Rule[] = [
     category: "database",
     check: (r, env) => {
       if (r.type !== "database") return null;
-      const sgIds = (r.properties.securityGroups as string[] | undefined) ?? [];
-      const viaPublic = sgIds
-        .flatMap(
-          (id) =>
-            (byId(env, id).properties.ingress as
-              { source: string }[] | undefined) ?? [],
-        )
+      const viaPublic = sgsOf(r)
+        .flatMap((id) => ingressOf(byId(env, id)))
         .some(
           (i) =>
             i.source !== "internet" &&
-            env.resources.some(
-              (x) =>
-                x.public &&
-                (
-                  (x.properties.securityGroups as string[] | undefined) ?? []
-                ).includes(i.source),
-            ),
+            env.resources.some((x) => x.public && sgsOf(x).includes(i.source)),
         );
       return viaPublic
         ? {

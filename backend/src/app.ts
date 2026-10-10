@@ -10,6 +10,7 @@ import auth from "./routes/auth";
 import projects from "./routes/projects";
 
 export const app = express();
+if (config.trustProxy) app.set("trust proxy", config.trustProxy);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(spec)); // mounted before helmet: Swagger UI needs inline scripts
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigin }));

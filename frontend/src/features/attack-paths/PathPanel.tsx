@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Bot, FlaskConical, Sparkles } from "lucide-react";
 import { errorInfo } from "../../lib/api";
-import { useAi, useAuthConfig, useWhatIf } from "../../lib/queries";
+import { useAi, useWhatIf } from "../../lib/queries";
 import type { AttackPath, Change, PathEdge } from "../../lib/types";
 import {
   Button,
-  ModeBadge,
   SEV,
   SeverityBadge,
   Tabs,
@@ -57,8 +56,7 @@ export default function PathPanel({
 }) {
   const [tab, setTab] = useState<Tab>("overview"),
     ai = useAi(projectId),
-    sim = useWhatIf(projectId),
-    cfg = useAuthConfig();
+    sim = useWhatIf(projectId);
   const [kind, setKind] = useState<"explain" | "remediation">("explain"),
     [picked, setPicked] = useState("");
   const route =
@@ -203,11 +201,6 @@ export default function PathPanel({
                 <Bot size={14} />
                 Assistant
               </span>
-              <ModeBadge
-                mode={
-                  ai.data?.mode ?? (cfg.data?.ai === "llm" ? "llm" : "demo")
-                }
-              />
             </div>
             <div className="flex gap-2">
               <Button

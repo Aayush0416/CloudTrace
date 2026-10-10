@@ -1,4 +1,5 @@
-import { lazy, Suspense, useMemo } from "react";
+import { usePrefs } from "../../lib/prefs";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { Background, ReactFlow } from "@xyflow/react";
@@ -9,7 +10,6 @@ import { useAuth } from "../../lib/auth";
 import { useActivity } from "../../lib/activity";
 import { ago } from "../../lib/format";
 import {
-  useAuthConfig,
   useFindingStates,
   useProjects,
   useResult,
@@ -34,13 +34,21 @@ import {
   ErrorState,
   Kpi,
   Loading,
-  ModeBadge,
   SEV,
   SeverityBadge,
+  Tabs,
 } from "../../components/ui";
-import { buildFlow, nodeTypes, visibleGraph } from "../attack-paths/graphKit";
+import { useGraphHover } from "../attack-paths/GraphHover";
+import {
+  buildFlow,
+  edgeTypes,
+  nodeTypes,
+  visibleGraph,
+} from "../attack-paths/graphKit";
 
 const Graph3D = lazy(() => import("../../components/Graph3D"));
+const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
+const EMPTY_ROWS: ResourceRow[] = [];
 const PROMPTS = [
   "Summarize this scan",
   "What should I fix first?",
@@ -50,10 +58,11 @@ const DOT = { crit: "bg-crit", high: "bg-high", ok: "bg-ok", info: "bg-low" };
 const NET = ["vpc", "subnet", "security_group"];
 
 export default function Home() {
+  const { theme } = usePrefs();
+  const [activeTab, setActiveTab] = useState<string>("create");
   const { user } = useAuth(),
     nav = useNavigate(),
-    projects = useProjects(),
-    cfg = useAuthConfig();
+    projects = useProjects();
   const list = projects.data ?? [],
     stored = localStorage.getItem("ct_project");
   const scanned = list
@@ -94,6 +103,11 @@ export default function Home() {
       keep: new Set(top.flatMap((p) => p.nodes)),
     });
   }, [graph.data, paths.data, resources.data]);
+  const hover = useGraphHover({
+    g: graph.data?.data ?? EMPTY_GRAPH,
+    resources: resources.data?.data ?? EMPTY_ROWS,
+    paths: paths.data?.data,
+  });
   if (projects.isLoading) return <Loading />;
   if (projects.error)
     return (
@@ -153,6 +167,7 @@ export default function Home() {
     .slice(0, 5);
   const steps = [
     {
+      id: "create",
       t: "Create a project",
       d: "A project holds one cloud environment.",
       done: list.length > 0,
@@ -160,6 +175,7 @@ export default function Home() {
       go: () => nav("/projects?new=1"),
     },
     {
+      id: "import",
       t: "Import an environment",
       d: "Upload JSON, or start from the enterprise sample.",
       done: list.some((p) => p.environmentName),
@@ -167,6 +183,7 @@ export default function Home() {
       go: () => active && nav(`/p/${active.id}/overview`),
     },
     {
+      id: "scan",
       t: "Run your first scan",
       d: "Generates findings, attack paths and the graph.",
       done: list.some((p) => p.summary),
@@ -174,13 +191,15 @@ export default function Home() {
       go: () => active && nav(`/p/${active.id}/overview`),
     },
   ];
-  const doneN = steps.filter((s) => s.done).length,
-    next = steps.find((s) => !s.done);
+  const doneN = steps.filter((s) => s.done).length;
   const sentence = !active
     ? "Create a project and import a cloud environment to see how exposure connects to your sensitive assets."
     : !S
       ? `${active.name} has no scan yet. Import an environment and run a scan to build its graph.`
       : `${S.criticalPaths} critical of ${S.paths} attack paths across ${S.resources} resources in ${active.name}. Last scan ${ago(active.lastScanAt)}.`;
+
+  const tabsList = steps.map((s) => ({ id: s.id, label: s.t }));
+  const currentStep = steps.find((s) => s.id === activeTab) || steps[0];
 
   const setup = (
     <Card
@@ -191,33 +210,24 @@ export default function Home() {
         </span>
       }
     >
-      <div className="p-4">
-        <div className="h-1.5 overflow-hidden rounded bg-raised">
+      <Tabs tabs={tabsList} value={activeTab} onChange={setActiveTab} />
+      <div className="p-6">
+        <div className="flex items-start gap-4">
           <div
-            className="h-full rounded bg-accent transition-all"
-            style={{ width: `${(doneN / steps.length) * 100}%` }}
-          />
+            className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+              currentStep.done ? "bg-ok text-on-brand" : "border border-accent text-accent"
+            }`}
+          >
+            {currentStep.done ? <Check size={16} strokeWidth={3} /> : steps.indexOf(currentStep) + 1}
+          </div>
+          <div>
+            <div className="text-lg font-medium">{currentStep.t}</div>
+            <div className="mt-1 text-muted">{currentStep.d}</div>
+            <Button variant="primary" className="mt-4" onClick={currentStep.go}>
+              {currentStep.cta}
+            </Button>
+          </div>
         </div>
-        <ol className="mt-4 space-y-4">
-          {steps.map((s, i) => (
-            <li key={s.t} className="flex gap-3">
-              <span
-                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${s.done ? "bg-ok text-black" : s === next ? "border border-accent text-accent" : "border border-line text-muted"}`}
-              >
-                {s.done ? <Check size={12} strokeWidth={3} /> : i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{s.t}</div>
-                <div className="text-muted">{s.d}</div>
-                {s === next && (
-                  <Button variant="primary" className="mt-2" onClick={s.go}>
-                    {s.cta}
-                  </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
       </div>
     </Card>
   );
@@ -273,7 +283,7 @@ export default function Home() {
           <Suspense fallback={<div className="h-48" />}>
             <Graph3D
               variant="banner"
-              className="h-48 w-full border-l border-line/60 bg-[radial-gradient(ellipse_at_center,var(--color-navy-800)_0%,transparent_75%)]"
+              className="h-48 w-full border-l border-line/60 bg-panel/40"
             />
           </Suspense>
         </div>
@@ -321,11 +331,15 @@ export default function Home() {
               >
                 <div className="h-[340px]">
                   {flow ? (
+                    <>
+                    {hover.tip}
                     <ReactFlow
+                      {...hover.bind}
                       nodes={flow.nodes}
                       edges={flow.edges}
                       nodeTypes={nodeTypes}
-                      colorMode="dark"
+                      edgeTypes={edgeTypes}
+                      colorMode={theme}
                       fitView
                       fitViewOptions={{ padding: 0.28 }}
                       nodesDraggable={false}
@@ -338,8 +352,9 @@ export default function Home() {
                       preventScrolling={false}
                       proOptions={{ hideAttribution: true }}
                     >
-                      <Background color="#10182b" gap={26} />
+                      <Background color="var(--graph-dots)" gap={26} />
                     </ReactFlow>
+                    </>
                   ) : (
                     <EmptyState
                       title="No attack paths"
@@ -375,7 +390,7 @@ export default function Home() {
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                        <div className="text-2xl font-semibold text-white">
+                        <div className="text-2xl font-semibold text-heading">
                           {total}
                         </div>
                         <div className="text-xs text-muted">findings</div>
@@ -565,12 +580,7 @@ export default function Home() {
               </Card>
             </div>
             <div className="space-y-5 lg:col-span-3">
-              <Card
-                title="Security advisor"
-                actions={
-                  <ModeBadge mode={cfg.data?.ai === "llm" ? "llm" : "demo"} />
-                }
-              >
+              <Card title="Security advisor">
                 <div className="p-4">
                   <p className="text-muted">
                     Ask for a plain-language explanation of any path, or what to

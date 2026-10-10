@@ -1,6 +1,11 @@
 @import "tailwindcss";
+
+/*
+  Design tokens. The values here are the DARK theme (the default).
+  The LIGHT theme overrides the same variables further down, so every component
+  (Tailwind classes, charts, the graph) follows the theme without changes.
+*/
 @theme {
-  /* Palette: #000000 #14213d #fca311 #e5e5e5 #ffffff */
   --color-navy-900: #000000;
   --color-navy-800: #14213d;
   --color-navy-700: #2b3d63;
@@ -8,55 +13,212 @@
   --color-gold-light: #ffb84d;
   --color-bg: #000000;
   --color-panel: #0a0f1c;
+  --color-chrome: #0a0f1c;
+  --color-hero: #000000;
   --color-raised: #14213d;
   --color-line: #22304f;
   --color-fg: #e5e5e5;
+  --color-heading: #ffffff;
   --color-muted: #97a3ba;
   --color-accent: #fca311;
   --color-accent-2: #ffb84d;
+  --color-on-accent: #000000;
+  --color-brand: #fca311;
+  --color-brand-2: #ffb84d;
+  --color-on-brand: #000000;
   --color-crit: #ff4d4f;
   --color-high: #ff7a59;
   --color-med: #b388ff;
   --color-low: #4da3ff;
   --color-info: #97a3ba;
   --color-ok: #3ddc97;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
   --font-sans:
-    "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+    "Source Sans 3 Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display:
+    "Fraunces Variable", Georgia, "Times New Roman", serif;
   --font-mono:
-    "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
+
+/* Graph and chart colours that are not Tailwind utilities */
+:root {
+  --graph-select: #ffffff;
+  --graph-neutral: #34507f;
+  --graph-dots: #10182b;
+  --graph-label-bg: #000000;
+  --edge-lateral: #fca311;
+  --edge-access: #22c8e8;
+  --edge-identity: #8a96ad;
+  --type-entry: #e5e5e5;
+  --type-compute: #6ea8fe;
+  --type-identity: #c4a1ff;
+  --type-storage: #5fd3a1;
+  --type-database: #ff8fa3;
+  --type-secret: #f4c95d;
+  --type-api: #7bdff2;
+  --type-network: #97a3ba;
+  --card-shadow: none;
+  --card-head: transparent;
+  --scene-fog: #000000;
+  --minimap-mask: rgba(0, 0, 0, 0.72);
+  --overlay: rgba(0, 0, 0, 0.7);
+  --on-entry: #000000;
+  --scene-edge: #2b3d63;
+  --scene-node: #5a76a8;
+  --scene-pulse: #ffffff;
+  color-scheme: dark;
+}
+
+/*
+  LIGHT theme: warm cream paper, white cards, a navy sidebar, top bar and landing hero, and the same orange as the dark theme.
+  Warm surfaces and a bold navy frame keep it lively instead of grey; text is navy-ink and accent text is a deep burnt orange.
+*/
+:root[data-theme="light"] {
+  --color-navy-900: #f8f4ec;
+  --color-navy-800: #efe8d8;
+  --color-navy-700: #c0b296;
+  --color-gold: #fca311;
+  --color-gold-light: #ffb84d;
+  --color-bg: #f8f4ec;
+  --color-panel: #ffffff;
+  --color-chrome: #1c1917;
+  --color-hero: #1c1917;
+  --color-raised: #f1eadb;
+  --color-line: #c0b296;
+  --color-fg: #1b2238;
+  --color-heading: #0e1426;
+  --color-muted: #575f77;
+  --color-accent: #b25000;
+  --color-accent-2: #8f3f00;
+  --color-on-accent: #ffffff;
+  --color-brand: #fca311;
+  --color-brand-2: #e8920a;
+  --color-on-brand: #14213d;
+  --color-crit: #b3261e;
+  --color-high: #b83a0a;
+  --color-med: #6d45c4;
+  --color-low: #1d5fa8;
+  --color-info: #575f77;
+  --color-ok: #1f7340;
+
+  --graph-select: #0e1426;
+  --graph-neutral: #8f8872;
+  --graph-dots: #e2d8c2;
+  --graph-label-bg: #ffffff;
+  --edge-lateral: #b45309;
+  --edge-access: #0e7490;
+  --edge-identity: #475569;
+  --type-entry: #1c1917;
+  --type-compute: #2f5d9e;
+  --type-identity: #6b46c1;
+  --type-storage: #2f7d4f;
+  --type-database: #b83b5e;
+  --type-secret: #946000;
+  --type-api: #0e7490;
+  --type-network: #475569;
+  --minimap-mask: rgba(248, 244, 236, 0.75);
+  --overlay: rgba(14, 20, 38, 0.55);
+  --on-entry: #ffffff;
+  --scene-edge: #9fb0cc;
+  --scene-node: #6c7fa6;
+  --scene-pulse: #d98200;
+  --scene-fog: #ffffff;
+  --card-shadow: 0 1px 2px rgba(27, 34, 56, 0.1), 0 3px 8px rgba(27, 34, 56, 0.06);
+  --card-head: #fff7e8;
+  color-scheme: light;
+}
+/* Navy areas of the light theme (sidebar, top bar, landing hero and call-to-action) use the dark theme's colours inside them. */
+:root[data-theme="light"] .app-chrome,
+:root[data-theme="light"] .on-dark {
+  --color-bg: #0c0a09;
+  --color-panel: #1c1917;
+  --color-raised: #292524;
+  --color-line: #44403c;
+  --color-navy-700: #44403c;
+  --color-fg: #e5e5e5;
+  --color-heading: #ffffff;
+  --color-muted: #a8a29e;
+  --color-accent: #fca311;
+  --color-accent-2: #ffb84d;
+  --color-on-accent: #000000;
+  --color-crit: #ff4d4f;
+  --color-high: #ff7a59;
+  --color-med: #b388ff;
+  --color-low: #4da3ff;
+  --color-ok: #3ddc97;
+  --scene-edge: #44403c;
+  --scene-node: #78716c;
+  --scene-pulse: #ffffff;
+  --scene-fog: #1c1917;
+
+  --type-entry: #e5e5e5;
+  --card-shadow: none;
+  --overlay: rgba(0, 0, 0, 0.7);
+  color: var(--color-fg);
+}
+/* Warm touches that only the light theme needs */
+:root[data-theme="light"] .kpi {
+  border-top: 3px solid var(--color-brand);
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
-/* Type scale: 14px body, 12px small, 24px page titles, 28px metrics */
+/* Type scale: 15px body, 13px small, display serif for page and section titles */
 body {
   background: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.55;
-  font-feature-settings: "tnum";
+  font-feature-settings: "tnum", "kern";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
 }
 h1,
 h2,
 h3 {
-  color: #fff;
+  color: var(--color-heading);
   letter-spacing: -0.01em;
+}
+/* The serif is reserved for page titles and marketing headings, so dense data stays in the sans */
+h1,
+.display h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variation-settings: "opsz" 72;
+  letter-spacing: -0.02em;
+}
+.font-display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72;
+}
+code,
+kbd,
+.font-mono {
+  font-family: var(--font-mono);
 }
 .page {
   max-width: 1360px;
   margin: 0 auto;
   padding: 24px 28px 40px;
 }
+@media (max-width: 640px) {
+  .page {
+    padding: 16px 14px 32px;
+  }
+}
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
 ::selection {
-  background: color-mix(in srgb, var(--color-gold) 35%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
 }
 * {
   scrollbar-width: thin;
@@ -70,6 +232,47 @@ h3 {
   border-color: var(--color-line) !important;
   fill: var(--color-fg) !important;
 }
+.react-flow__attribution {
+  background: color-mix(in srgb, var(--color-panel) 80%, transparent) !important;
+  color: var(--color-muted) !important;
+}
+.react-flow__attribution a {
+  color: var(--color-muted) !important;
+}
+/* Keep dragging and pinching on the graph from scrolling the whole page on phones */
+.react-flow {
+  touch-action: none;
+}
+
+@media (max-width: 640px) {
+  .react-flow__minimap {
+    display: none;
+  }
+}
+
+/* Table spacing preference */
+:root[data-density="compact"] table th,
+:root[data-density="compact"] table td {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+:root[data-density="compact"] .page {
+  padding-top: 16px;
+}
+
+/* Reduced motion preference (also applied automatically from the operating system setting) */
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+:root[data-motion="reduce"] .react-flow__edge.animated path {
+  animation: none !important;
+}
+
 @media print {
   .app-chrome,
   .no-print {

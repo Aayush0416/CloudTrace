@@ -4,9 +4,17 @@ import { getProvider } from "../services/ai";
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
-import { HttpError, requireAuth, userId } from "../middleware";
+import {
+  audit,
+  heavyLimiter,
+  HttpError,
+  requireAuth,
+  userId,
+} from "../middleware";
 import { analyze } from "../analyze";
 import { parseEnvironment } from "../services/parser";
+import { RULES } from "../services/security-rules";
+import { pathKey } from "../services/attack-path";
 
 const r = Router();
 r.use(requireAuth);
@@ -20,7 +28,21 @@ const aiLimiter = rateLimit({
     error: "Too many assistant requests. Try again in a few minutes.",
   },
 });
+/** Small LRU: explanations are cached per scan + path, but the cache must not grow without bound. */
+const AI_CACHE_MAX = 200;
 const aiCache = new Map<string, unknown>();
+const aiCacheGet = (k: string) => {
+  const v = aiCache.get(k);
+  if (v !== undefined) {
+    aiCache.delete(k);
+    aiCache.set(k, v);
+  }
+  return v;
+};
+const aiCacheSet = (k: string, v: unknown) => {
+  aiCache.set(k, v);
+  if (aiCache.size > AI_CACHE_MAX) aiCache.delete(aiCache.keys().next().value!);
+};
 
 const owned = async (req: Request) => {
   const id = String(req.params.id);
@@ -47,6 +69,39 @@ const latestResult = async (projectId: string) =>
     orderBy: { startedAt: "desc" },
   });
 
+type Summary = ReturnType<typeof summarize>;
+/** Reads a scan's stored summary; scans from before the summary column existed are summarized once and backfilled. */
+const summaryOf = async (scan: {
+  id: string;
+  summary: unknown;
+}): Promise<Summary> => {
+  if (scan.summary) return scan.summary as Summary;
+  const full = await prisma.scan.findUnique({
+    where: { id: scan.id },
+    select: { result: true },
+  });
+  const summary = summarize(full?.result);
+  if (summary)
+    await prisma.scan
+      .update({ where: { id: scan.id }, data: { summary } })
+      .catch(() => undefined);
+  return summary;
+};
+/** Latest completed scan WITHOUT its (large) result JSON: enough for lists, headers and counts. */
+const latestScanInfo = async (projectId: string) => {
+  const s = await prisma.scan.findFirst({
+    where: { projectId, status: "completed" },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, startedAt: true, completedAt: true, summary: true },
+  });
+  return s ? { ...s, summary: await summaryOf(s) } : null;
+};
+/** True when the environment was re-imported after the latest scan, so stored results describe an older environment. */
+const isStale = (
+  p: { environmentUpdatedAt?: Date | null },
+  s: { startedAt: Date } | null,
+) => !!(s && p.environmentUpdatedAt && s.startedAt < p.environmentUpdatedAt);
+
 const body = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(300).optional(),
@@ -60,7 +115,7 @@ r.get("/", async (req, res) => {
   res.json(
     await Promise.all(
       list.map(async (p) => {
-        const s = await latestResult(p.id);
+        const s = await latestScanInfo(p.id);
         return {
           id: p.id,
           name: p.name,
@@ -69,7 +124,8 @@ r.get("/", async (req, res) => {
           createdAt: p.createdAt,
           environmentName: (p.environment as any)?.name ?? null,
           lastScanAt: s?.completedAt ?? null,
-          summary: summarize(s?.result),
+          summary: s?.summary ?? null,
+          stale: isStale(p, s),
         };
       }),
     ),
@@ -77,15 +133,15 @@ r.get("/", async (req, res) => {
 });
 r.post("/", async (req, res) => {
   const b = body.parse(req.body);
-  res
-    .status(201)
-    .json(
-      await prisma.project.create({ data: { ...b, ownerId: userId(req) } }),
-    );
+  const created = await prisma.project.create({
+    data: { ...b, ownerId: userId(req) },
+  });
+  await audit(req, "project.create", created.id, { name: created.name });
+  res.status(201).json(created);
 });
 r.get("/:id", async (req, res) => {
   const p = await owned(req);
-  const s = await latestResult(p.id);
+  const s = await latestScanInfo(p.id);
   res.json({
     id: p.id,
     name: p.name,
@@ -94,37 +150,52 @@ r.get("/:id", async (req, res) => {
     environmentName: (p.environment as any)?.name ?? null,
     hasEnvironment: !!p.environment,
     lastScanAt: s?.completedAt ?? null,
-    summary: summarize(s?.result),
+    summary: s?.summary ?? null,
+    stale: isStale(p, s),
   });
 });
+const patchBody = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  // null or an empty string clears the description
+  description: z
+    .string()
+    .trim()
+    .max(300)
+    .nullable()
+    .optional()
+    .transform((v) => (v === "" ? null : v)),
+});
 r.patch("/:id", async (req, res) => {
-  await owned(req);
-  res.json(
-    await prisma.project.update({
-      where: { id: String(req.params.id) },
-      data: body.partial().parse(req.body),
-    }),
-  );
+  const p = await owned(req);
+  const data = patchBody.parse(req.body);
+  const updated = await prisma.project.update({ where: { id: p.id }, data });
+  await audit(req, "project.update", p.id, { fields: Object.keys(data) });
+  res.json(updated);
 });
 r.delete("/:id", async (req, res) => {
-  await owned(req);
-  await prisma.project.delete({ where: { id: String(req.params.id) } });
+  const p = await owned(req);
+  await audit(req, "project.delete", p.id, { name: p.name });
+  await prisma.project.delete({ where: { id: p.id } });
   res.status(204).end();
 });
 
 // FR-03/04/05: validate and store the environment
-r.post("/:id/import", async (req, res) => {
+r.post("/:id/import", heavyLimiter, async (req, res) => {
   const p = await owned(req);
   const env = parseEnvironment(req.body);
   await prisma.project.update({
     where: { id: p.id },
-    data: { environment: env as any },
+    data: { environment: env as any, environmentUpdatedAt: new Date() },
+  });
+  await audit(req, "environment.import", p.id, {
+    name: env.name,
+    resources: env.resources.length,
   });
   res.json({ name: env.name, resources: env.resources.length });
 });
 
 // FR-06..10, FR-14: run the deterministic pipeline and record the scan
-r.post("/:id/scan", async (req, res) => {
+r.post("/:id/scan", heavyLimiter, async (req, res) => {
   const p = await owned(req);
   if (!p.environment)
     throw new HttpError(409, "Import an environment before running a scan");
@@ -144,37 +215,48 @@ r.post("/:id/scan", async (req, res) => {
     findingCount: out.findings.filter((f) => f.resourceId === x.id).length,
     pathCount: out.paths.filter((a) => a.nodes.includes(x.id)).length,
   }));
+  const summary = summarize({ ...out, resources });
   const scan = await prisma.scan.create({
     data: {
       projectId: p.id,
       startedAt,
       completedAt: new Date(),
       result: { ...out, resources } as any,
+      summary: summary as any,
     },
   });
-  res
-    .status(201)
-    .json({
-      id: scan.id,
-      completedAt: scan.completedAt,
-      summary: summarize({ ...out, resources }),
-    });
+  await audit(req, "scan.run", p.id, { scanId: scan.id, ...summary });
+  res.status(201).json({
+    id: scan.id,
+    completedAt: scan.completedAt,
+    summary,
+  });
 });
 r.get("/:id/scans", async (req, res) => {
   const p = await owned(req);
   const scans = await prisma.scan.findMany({
     where: { projectId: p.id },
     orderBy: { startedAt: "asc" },
+    select: {
+      id: true,
+      status: true,
+      source: true,
+      startedAt: true,
+      completedAt: true,
+      summary: true,
+    },
   });
   res.json(
-    scans.map((s) => ({
-      id: s.id,
-      status: s.status,
-      source: s.source,
-      startedAt: s.startedAt,
-      completedAt: s.completedAt,
-      summary: summarize(s.result),
-    })),
+    await Promise.all(
+      scans.map(async (s) => ({
+        id: s.id,
+        status: s.status,
+        source: s.source,
+        startedAt: s.startedAt,
+        completedAt: s.completedAt,
+        summary: s.status === "completed" ? await summaryOf(s) : null,
+      })),
+    ),
   );
 });
 
@@ -194,6 +276,7 @@ for (const [route, key, empty] of [
       completedAt: s?.completedAt ?? null,
       data: (s?.result as any)?.[key] ?? empty,
       truncated: !!(s?.result as any)?.truncated,
+      stale: isStale(p, s),
     });
   });
 
@@ -213,7 +296,7 @@ const changeSchema = z.discriminatedUnion("type", [
     target: z.string(),
   }),
 ]);
-r.post("/:id/what-if", async (req, res) => {
+r.post("/:id/what-if", heavyLimiter, async (req, res) => {
   const p = await owned(req);
   if (!p.environment)
     throw new HttpError(409, "Import an environment before simulating changes");
@@ -221,7 +304,7 @@ r.post("/:id/what-if", async (req, res) => {
     simulate(p.environment, changeSchema.parse(req.body?.change) as Change),
   );
 });
-r.get("/:id/remediations", async (req, res) => {
+r.get("/:id/remediations", heavyLimiter, async (req, res) => {
   const p = await owned(req);
   res.json(p.environment ? rankRemediations(p.environment) : []);
 });
@@ -232,6 +315,11 @@ const aiContext = async (req: Request) => {
   const s = await latestResult(project.id);
   if (!s?.result)
     throw new HttpError(409, "Run a scan before using the assistant");
+  if (isStale(project, s))
+    throw new HttpError(
+      409,
+      "The environment changed since the last scan. Run a new scan before using the assistant.",
+    );
   const result = s.result as any;
   return {
     project,
@@ -250,7 +338,7 @@ for (const kind of ["explain", "remediation"] as const)
       throw new HttpError(404, "Attack path not found in the latest scan");
     const ai = getProvider();
     const ck = `${scanId}|${path.id}|${kind}`,
-      hit = aiCache.get(ck);
+      hit = aiCacheGet(ck);
     if (hit) {
       res.json(hit);
       return;
@@ -259,7 +347,7 @@ for (const kind of ["explain", "remediation"] as const)
       kind === "explain"
         ? await ai.explainPath({ path, labels })
         : await ai.suggestFixes({ path, labels });
-    if (out.mode === "llm") aiCache.set(ck, out);
+    if (out.mode === "llm") aiCacheSet(ck, out);
     res.json(out);
   });
 r.post("/:id/assistant", aiLimiter, async (req, res) => {
@@ -267,9 +355,9 @@ r.post("/:id/assistant", aiLimiter, async (req, res) => {
     .object({ question: z.string().trim().min(1).max(500) })
     .parse(req.body);
   const { project, result, labels } = await aiContext(req);
-  const ranked = project.environment
-    ? rankRemediations(project.environment)
-    : [];
+  // Ranking tries every single change, so it is computed only if the provider actually asks for it.
+  const ranked = () =>
+    project.environment ? rankRemediations(project.environment) : [];
   res.json(
     await getProvider().chat(question, {
       labels,
@@ -281,10 +369,11 @@ r.post("/:id/assistant", aiLimiter, async (req, res) => {
   );
 });
 // Finding workflow: status survives re-scans because it is keyed by project + rule + resource
+const RULE_IDS = new Set(RULES.map((r) => r.id));
 const stateSchema = z
   .object({
-    ruleId: z.string(),
-    resourceId: z.string(),
+    ruleId: z.string().max(40),
+    resourceId: z.string().min(1).max(200),
     status: z.enum(["open", "acknowledged", "fixed", "accepted"]),
     note: z.string().trim().max(500).optional(),
   })
@@ -299,6 +388,18 @@ r.get("/:id/finding-states", async (req, res) => {
 r.put("/:id/finding-states", async (req, res) => {
   const p = await owned(req),
     b = stateSchema.parse(req.body);
+  if (!RULE_IDS.has(b.ruleId))
+    throw new HttpError(400, `Unknown rule "${b.ruleId}"`);
+  if (
+    p.environment &&
+    !(p.environment as any).resources?.some((x: any) => x.id === b.resourceId)
+  )
+    throw new HttpError(400, `Unknown resource "${b.resourceId}"`);
+  await audit(req, "finding.state", p.id, {
+    ruleId: b.ruleId,
+    resourceId: b.resourceId,
+    status: b.status,
+  });
   res.json(
     await prisma.findingState.upsert({
       where: {
@@ -320,7 +421,18 @@ r.put("/:id/finding-states", async (req, res) => {
   );
 });
 
-// Scan-to-scan diff: paths matched by their ordered node sequence
+r.get("/:id/audit-logs", async (req, res) => {
+  const p = await owned(req);
+  const logs = await prisma.auditLog.findMany({
+    where: { projectId: p.id },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { user: { select: { email: true, name: true } } },
+  });
+  res.json(logs);
+});
+
+// Scan-to-scan diff: paths matched by their ordered edge keys
 r.get("/:id/diff", async (req, res) => {
   const p = await owned(req);
   const scans = await prisma.scan.findMany({
@@ -334,7 +446,7 @@ r.get("/:id/diff", async (req, res) => {
   }
   const cur: any[] = (scans[0].result as any).paths,
     prev: any[] = (scans[1].result as any).paths;
-  const k = (x: any) => x.nodes.join(">"),
+  const k = (x: any) => (x.edges ? pathKey(x) : x.nodes.join(">")),
     pm = new Map(prev.map((x) => [k(x), x])),
     cm = new Map(cur.map((x) => [k(x), x]));
   const ref = (x: any) => ({

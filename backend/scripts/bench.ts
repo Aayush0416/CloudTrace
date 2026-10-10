@@ -19,7 +19,7 @@ for (const n of [1000, 5000, 10000]) {
   const [, tDij] = time(() => kShortestRoutes(adj, 'n0', last, 1)), [, tYen] = time(() => kShortestRoutes(adj, 'n0', last, 5));
   rows.push(`| ${n} | ${g.size} | ${tAdj} | ${tBfs} | ${tDij} | ${tYen} |`);
 }
-const out = `# Algorithm benchmark\n\nSynthetic layered graphs (5 forward edges per node, random confidence), source n0 to the last node. Node ${process.version}, single run.\n\n${rows.join('\n')}\n\nDijkstra uses a binary heap: O((V + E) log V). Yen's runs up to K x path-length Dijkstra calls.\nDFS path enumeration is exponential in the worst case, so CloudTrace bounds it (depth 8, 500 paths) and reports when it truncates.\n`;
+const out = `# Algorithm benchmark\n\nSynthetic layered graphs (5 forward edges per node, random confidence), source n0 to the last node. Node ${process.version}, single run.\n\n${rows.join('\n')}\n\nDijkstra uses a binary heap: O((V + E) log V). Yen's runs up to K x path-length Dijkstra calls.\nDFS path enumeration is exponential in the worst case, so CloudTrace bounds it (depth 8, 500 paths shared between entry points, 200,000 node expansions per entry point) and reports when it truncates.\n`;
 mkdirSync(join(__dirname, '../../docs'), { recursive: true });
 writeFileSync(join(__dirname, '../../docs/benchmark.md'), out);
 console.log(out);

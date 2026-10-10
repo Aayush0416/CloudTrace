@@ -11,12 +11,15 @@ export interface ChatCtx {
   paths: any[];
   findings: Finding[];
   resources: any[];
-  ranked: {
-    label: string;
-    pathsRemoved: number;
-    criticalPathsRemoved: number;
-  }[];
+  ranked: Ranked[] | (() => Ranked[]);
 }
+export interface Ranked {
+  label: string;
+  pathsRemoved: number;
+  criticalPathsRemoved: number;
+}
+const rankedOf = (c: ChatCtx): Ranked[] =>
+  typeof c.ranked === "function" ? c.ranked() : c.ranked;
 export interface AiResult {
   summary: string;
   step_explanations: { step: number; explanation: string }[];
@@ -148,14 +151,15 @@ class DemoProvider implements AiProvider {
       );
     }
     if (/fix|first|priorit|remediat|recommend|should|reduce/.test(q)) {
-      if (!c.ranked.length)
+      const ranked = rankedOf(c);
+      if (!ranked.length)
         return reply(
           "No single change removes an attack path right now, so there is nothing to prioritize.",
         );
       return reply(
         [
           "These changes remove the most attack paths:",
-          ...c.ranked
+          ...ranked
             .slice(0, 3)
             .map(
               (r, i) =>
@@ -302,7 +306,7 @@ function runTool(name: string, a: any, c: ChatCtx) {
         .filter((r) => r.public)
         .map((r) => ({ id: r.id, name: r.name, paths: r.pathCount }));
     case "top_fixes":
-      return c.ranked;
+      return rankedOf(c);
     default:
       return { error: "unknown tool" };
   }

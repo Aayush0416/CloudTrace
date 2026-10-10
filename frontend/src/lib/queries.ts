@@ -44,7 +44,7 @@ export function useResult<T>(
   });
 }
 const refresh = (qc: QueryClient, id: string) =>
-  ["projects", "project", "result", "scans", "remediations", "diff"].forEach(
+  ["projects", "project", "result", "scans", "remediations", "diff", "audit"].forEach(
     (k) => qc.invalidateQueries({ queryKey: k === "projects" ? [k] : [k, id] }),
   );
 export function useRunScan(id: string) {
@@ -151,3 +151,12 @@ export function useSetFindingState(id: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fstates", id] }),
   });
 }
+
+import type { AuditLogRow } from "./types";
+export const useAuditLogs = (id: string) =>
+  useQuery({
+    queryKey: ["audit", id],
+    enabled: !!id,
+    queryFn: async () =>
+      (await api.get<AuditLogRow[]>(`/projects/${id}/audit-logs`)).data,
+  });

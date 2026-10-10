@@ -9,6 +9,6 @@ Synthetic layered graphs (5 forward edges per node, random confidence), source n
 | 10000 | 49995 | 138.5 | 13.9 | 36.4 | 16137.1 |
 
 Dijkstra uses a binary heap: O((V + E) log V). Yen's runs up to K x path-length Dijkstra calls.
-DFS path enumeration is exponential in the worst case, so CloudTrace bounds it (depth 8, 500 paths) and reports when it truncates.
+DFS path enumeration is exponential in the worst case, so CloudTrace bounds it (depth 8, 500 paths shared between entry points, 200,000 node expansions per entry point) and reports when it truncates.
 
 Note: the Yen's column is slow on these synthetic graphs because their shortest routes are hundreds of hops long, and Yen's re-runs Dijkstra once per hop. Real cloud attack paths are short (CloudTrace bounds search depth at 8), so the practical cost is far lower. Dijkstra alone stays under 40 ms at 10,000 nodes.

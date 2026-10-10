@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { BadgeCheck } from "lucide-react";
 import { api, errorInfo } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import Preferences from "./Preferences";
 import {
   Button,
   Card,
@@ -108,10 +109,11 @@ export default function Account() {
   return (
     <div className="page max-w-3xl">
       <PageHeader
-        title="Account"
-        sub="Manage your profile, sign-in methods and sessions."
+        title="Account settings"
+        sub="Appearance and preferences, your profile, sign-in methods and sessions."
       />
       <div className="space-y-5">
+        <Preferences />
         <Section title="Profile">
           <Field label="Name">
             <input

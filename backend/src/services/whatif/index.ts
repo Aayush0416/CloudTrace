@@ -1,4 +1,6 @@
+import crypto from "crypto";
 import { analyze } from "../../analyze";
+import { pathKey } from "../attack-path";
 import { parseEnvironment, ValidationError, type Environment } from "../parser";
 import type { Severity } from "../security-rules";
 
@@ -73,9 +75,9 @@ const snap = (a: Analysis) => ({
   findings: a.findings.length,
 });
 
-/** Baseline vs simulation, matching paths by their ordered node sequence (IDs can shift between runs). */
+/** Baseline vs simulation, matching paths by their ordered edge keys (IDs can shift between runs, and parallel edges share a node sequence). */
 export function compare(base: Analysis, sim: Analysis) {
-  const key = (p: { nodes: string[] }) => p.nodes.join(">");
+  const key = (p: { edges: { key: string }[] }) => pathKey(p);
   const bm = new Map(base.paths.map((p) => [key(p), p])),
     sm = new Map(sim.paths.map((p) => [key(p), p]));
   const targets = (a: Analysis) => new Set(a.paths.map((p) => p.target));
@@ -110,10 +112,32 @@ export function simulate(envRaw: unknown, change: Change) {
   };
 }
 
-/** Path-breaking impact: tries every single change and ranks them by how many attack paths it removes. */
+/** Upper bound on single changes tried per call, so ranking stays fast on large environments. */
+export const MAX_CANDIDATES = 400;
+const rankCache = new Map<string, ReturnType<typeof computeRanking>>();
+
+/** Path-breaking impact: tries every single change and ranks them by how many attack paths it removes. Memoized per environment. */
 export function rankRemediations(envRaw: unknown, limit = 8) {
   const env = parseEnvironment(envRaw),
-    base = analyze(env);
+    key = crypto
+      .createHash("sha1")
+      .update(JSON.stringify(env))
+      .update(String(limit))
+      .digest("hex");
+  const hit = rankCache.get(key);
+  if (hit) {
+    rankCache.delete(key); // refresh LRU position
+    rankCache.set(key, hit);
+    return hit;
+  }
+  const out = computeRanking(env, limit);
+  rankCache.set(key, out);
+  if (rankCache.size > 32) rankCache.delete(rankCache.keys().next().value!);
+  return out;
+}
+
+function computeRanking(env: Environment, limit: number) {
+  const base = analyze(env);
   const candidates: Change[] = [];
   for (const r of env.resources) {
     if (r.public) candidates.push({ type: "make_private", resourceId: r.id });
@@ -133,6 +157,7 @@ export function rankRemediations(envRaw: unknown, limit = 8) {
       });
   }
   return candidates
+    .slice(0, MAX_CANDIDATES)
     .map((change) => {
       const c = compare(base, analyze(applyChange(env, change)));
       return {

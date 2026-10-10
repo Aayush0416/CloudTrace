@@ -1,0 +1,129 @@
+{
+ "name": "ssrf-over-privileged-role",
+ "provider": "aws",
+ "resources": [
+  {
+   "id": "vpc-main",
+   "type": "network",
+   "subtype": "vpc",
+   "name": "prod-vpc"
+  },
+  {
+   "id": "subnet-public",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "public-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "subnet-private",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "private-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "sg-alb",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "alb-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 443,
+      "source": "internet"
+     }
+    ]
+   }
+  },
+  {
+   "id": "sg-proxy",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "web-proxy-sg",
+   "properties": {
+    "ingress": [
+     {
+      "port": 443,
+      "source": "internet"
+     },
+     {
+      "port": 8080,
+      "source": "internet"
+     }
+    ]
+   }
+  },
+  {
+   "id": "ec2-proxy",
+   "type": "compute",
+   "subtype": "ec2",
+   "name": "web-proxy-waf",
+   "public": true,
+   "criticality": "medium",
+   "properties": {
+    "securityGroups": [
+     "sg-proxy"
+    ],
+    "imdsv2Required": false
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-public"
+    },
+    {
+     "type": "uses",
+     "target": "role-proxy"
+    }
+   ]
+  },
+  {
+   "id": "role-proxy",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "web-proxy-role",
+   "permissions": [
+    {
+     "action": "admin",
+     "target": "s3-customer-data"
+    },
+    {
+     "action": "read",
+     "target": "s3-app-logs"
+    }
+   ]
+  },
+  {
+   "id": "s3-customer-data",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "customer-data-bucket",
+   "criticality": "critical"
+  },
+  {
+   "id": "s3-app-logs",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "app-logs-bucket",
+   "criticality": "low"
+  },
+  {
+   "id": "secret-api-keys",
+   "type": "secret",
+   "subtype": "secrets_manager",
+   "name": "partner-api-keys",
+   "criticality": "high"
+  }
+ ]
+}

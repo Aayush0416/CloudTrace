@@ -59,6 +59,7 @@ model Project {
   description String?
   provider    String   @default("aws")
   environment Json?
+  environmentUpdatedAt DateTime? @map("environment_updated_at")
   createdAt   DateTime @default(now()) @map("created_at")
   owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   team        Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
@@ -77,6 +78,7 @@ model Scan {
   startedAt   DateTime  @default(now()) @map("started_at")
   completedAt DateTime? @map("completed_at")
   result      Json?
+  summary     Json?
   error       String?
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -110,5 +112,6 @@ model AuditLog {
   team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
+  @@index([projectId, createdAt])
   @@map("audit_logs")
 }

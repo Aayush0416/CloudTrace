@@ -23,6 +23,8 @@ export interface Project {
   hasEnvironment?: boolean;
   lastScanAt: string | null;
   summary: Summary | null;
+  /** True when the environment was re-imported after the last scan. */
+  stale?: boolean;
   createdAt?: string;
 }
 export interface Finding {
@@ -197,4 +199,11 @@ export interface AuthConfig {
   google: string | null;
   emailDelivery: boolean;
   ai: "demo" | "llm";
+}
+export interface AuditLogRow {
+  id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+  user: { email: string; name: string };
 }

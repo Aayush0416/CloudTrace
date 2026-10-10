@@ -1,0 +1,135 @@
+{
+ "name": "cicd-supply-chain",
+ "provider": "aws",
+ "resources": [
+  {
+   "id": "vpc-main",
+   "type": "network",
+   "subtype": "vpc",
+   "name": "prod-vpc"
+  },
+  {
+   "id": "subnet-private",
+   "type": "network",
+   "subtype": "subnet",
+   "name": "private-subnet",
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "vpc-main"
+    }
+   ]
+  },
+  {
+   "id": "user-ci",
+   "type": "identity",
+   "subtype": "iam_user",
+   "name": "github-actions-user",
+   "properties": {
+    "compromised": true
+   },
+   "permissions": [
+    {
+     "action": "read",
+     "target": "s3-artifacts"
+    }
+   ],
+   "relationships": [
+    {
+     "type": "assumes",
+     "target": "role-deploy"
+    }
+   ]
+  },
+  {
+   "id": "role-deploy",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "deploy-role",
+   "permissions": [
+    {
+     "action": "write",
+     "target": "s3-artifacts"
+    },
+    {
+     "action": "read",
+     "target": "s3-tf-state"
+    }
+   ],
+   "relationships": [
+    {
+     "type": "assumes",
+     "target": "role-infra-admin"
+    }
+   ]
+  },
+  {
+   "id": "role-infra-admin",
+   "type": "identity",
+   "subtype": "iam_role",
+   "name": "infra-admin-role",
+   "permissions": [
+    {
+     "action": "admin",
+     "target": "rds-prod"
+    },
+    {
+     "action": "admin",
+     "target": "secret-prod-keys"
+    },
+    {
+     "action": "write",
+     "target": "s3-tf-state"
+    }
+   ]
+  },
+  {
+   "id": "s3-artifacts",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "build-artifacts",
+   "criticality": "medium"
+  },
+  {
+   "id": "s3-tf-state",
+   "type": "storage",
+   "subtype": "s3",
+   "name": "terraform-state",
+   "criticality": "high"
+  },
+  {
+   "id": "rds-prod",
+   "type": "database",
+   "subtype": "rds",
+   "name": "prod-database",
+   "criticality": "critical",
+   "properties": {
+    "securityGroups": [
+     "sg-db"
+    ]
+   },
+   "relationships": [
+    {
+     "type": "runs_on",
+     "target": "subnet-private"
+    }
+   ]
+  },
+  {
+   "id": "sg-db",
+   "type": "network",
+   "subtype": "security_group",
+   "name": "db-sg",
+   "properties": {
+    "ingress": []
+   }
+  },
+  {
+   "id": "secret-prod-keys",
+   "type": "secret",
+   "subtype": "secrets_manager",
+   "name": "prod-signing-keys",
+   "criticality": "critical"
+  }
+ ]
+}

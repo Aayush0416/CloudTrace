@@ -1,5 +1,6 @@
 import axios from "axios";
 export const TOKEN_KEY = "ct_token";
+export const UNAUTHORIZED_EVENT = "ct:unauthorized";
 export const api = axios.create({ baseURL: "/api" });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem(TOKEN_KEY);
@@ -15,8 +16,10 @@ api.interceptors.response.use(
       !url.startsWith("/auth/login") &&
       !url.startsWith("/auth/register")
     ) {
+      // Never navigate from here: the public pages (landing, login) must stay where they are.
+      // AuthProvider listens for this event, signs the user out in memory, and the route guard redirects only private pages.
       localStorage.removeItem(TOKEN_KEY);
-      if (!location.pathname.startsWith("/login")) location.assign("/login");
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
     return Promise.reject(e);
   },

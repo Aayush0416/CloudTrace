@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useStartPath } from "../../lib/prefs";
 import { Waypoints } from "lucide-react";
 import { api, errorInfo } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -14,7 +15,7 @@ const Shell = ({
   sub: string;
   children: ReactNode;
 }) => (
-  <div className="flex h-full items-center justify-center bg-[radial-gradient(ellipse_at_top,var(--color-navy-800),var(--color-bg)_60%)] p-4">
+  <div className="flex min-h-full items-center justify-center display bg-bg p-4">
     <div className="w-full max-w-sm">
       <Link
         to="/"
@@ -23,9 +24,9 @@ const Shell = ({
         <Waypoints className="text-accent" />
         CloudTrace
       </Link>
-      <div className="space-y-4 rounded-md border border-line bg-panel p-6">
+      <div className="space-y-4 rounded-xl border border-line bg-panel p-6 shadow-[var(--card-shadow)] sm:p-7">
         <div>
-          <h1 className="text-base font-semibold">{title}</h1>
+          <h1 className="text-[24px] leading-tight">{title}</h1>
           <p className="mt-1 text-muted">{sub}</p>
         </div>
         {children}
@@ -37,15 +38,13 @@ const Shell = ({
 export function ForgotPassword() {
   const [email, setEmail] = useState(""),
     [state, setState] = useState<"idle" | "busy" | "done">("idle"),
-    [error, setError] = useState(""),
-    [delivered, setDelivered] = useState(true);
+    [error, setError] = useState("");
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setState("busy");
     setError("");
     try {
-      const r = await api.post("/auth/forgot", { email });
-      setDelivered(r.data.delivered);
+      await api.post("/auth/forgot", { email });
       setState("done");
     } catch (x) {
       setError(errorInfo(x).message);
@@ -63,12 +62,6 @@ export function ForgotPassword() {
             If an account exists for <span className="text-fg">{email}</span>, a
             reset link is on its way. It expires in 1 hour.
           </p>
-          {!delivered && (
-            <p className="rounded border border-med/40 bg-med/10 px-3 py-2 text-med">
-              This server isn't set up to send email. When running locally, copy
-              the link from the backend console.
-            </p>
-          )}
         </>
       ) : (
         <form onSubmit={submit} className="space-y-4">
@@ -107,7 +100,8 @@ export function ForgotPassword() {
 export function ResetPassword() {
   const token = useSearchParams()[0].get("token"),
     { loginWithToken } = useAuth(),
-    nav = useNavigate();
+    nav = useNavigate(),
+    start = useStartPath();
   const [pw, setPw] = useState(""),
     [error, setError] = useState(
       token ? "" : "This reset link is missing its token.",
@@ -121,7 +115,7 @@ export function ResetPassword() {
     try {
       const r = await api.post("/auth/reset", { token, password: pw });
       loginWithToken(r.data);
-      nav("/home", { replace: true });
+      nav(start, { replace: true });
     } catch (x) {
       setError(errorInfo(x).message);
       setBusy(false);

@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./lib/auth";
+import { useStartPath } from "./lib/prefs";
 import { Loading } from "./components/ui";
 import Layout from "./components/Layout";
 import Landing from "./features/landing/Landing";
@@ -30,10 +31,11 @@ function Protected() {
 }
 function Root() {
   const { user, loading } = useAuth();
+  const start = useStartPath();
   return loading ? (
     <Loading label="Loading" />
   ) : user ? (
-    <Navigate to="/home" replace />
+    <Navigate to={start} replace />
   ) : (
     <Landing />
   );

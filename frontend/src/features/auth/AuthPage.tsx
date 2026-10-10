@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useStartPath } from "../../lib/prefs";
+import ThemeToggle from "../../components/ThemeToggle";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -43,10 +45,10 @@ function CheckInbox({ p, onBack }: { p: Pending; onBack: () => void }) {
   };
   const Icon = p.delivered ? MailCheck : MailX;
   return (
-    <div className="space-y-4 rounded-md border border-line bg-panel p-6">
+    <div className="space-y-4 rounded-xl border border-line bg-panel p-6 shadow-[var(--card-shadow)] sm:p-7">
       <Icon className={p.delivered ? "text-accent" : "text-med"} size={22} />
       <h1 className="text-base font-semibold">
-        {p.delivered ? "Check your email" : "Verification email not sent"}
+        {p.delivered ? "Check your email" : "We couldn't send the email"}
       </h1>
       {p.delivered ? (
         <p className="text-muted">
@@ -57,9 +59,8 @@ function CheckInbox({ p, onBack }: { p: Pending; onBack: () => void }) {
       ) : (
         <p className="text-muted">
           Your account for <span className="text-fg">{p.email}</span> was
-          created, but this server isn't set up to send email, so no message
-          went out. Ask the administrator to configure email, or when running
-          locally copy the link printed in the backend console.
+          created, but the verification email could not be sent right now. Use
+          Resend below to try again in a moment.
         </p>
       )}
       {state === "sent" && (
@@ -87,7 +88,8 @@ function CheckInbox({ p, onBack }: { p: Pending; onBack: () => void }) {
 export default function AuthPage({ mode }: { mode: "login" | "register" }) {
   const { user, login, register: signUp, google } = useAuth(),
     cfg = useAuthConfig(),
-    nav = useNavigate();
+    nav = useNavigate(),
+    start = useStartPath();
   const [error, setError] = useState(""),
     [pending, setPending] = useState<Pending | null>(null),
     reg = mode === "register";
@@ -98,7 +100,7 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
     setError: setFieldError,
     formState: { errors, isSubmitting },
   } = useForm<Form>({ resolver: zodResolver(schema) });
-  if (user) return <Navigate to="/home" replace />;
+  if (user) return <Navigate to={start} replace />;
   const submit = async (f: Form) => {
     if (reg && (f.name?.trim().length ?? 0) < 2)
       return setFieldError("name", { message: "Enter your name" });
@@ -109,7 +111,7 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
         if (!r.auto) setPending({ email: r.email, delivered: r.delivered });
       } else {
         await login(f.email, f.password);
-        nav("/home");
+        nav(start);
       }
     } catch (e) {
       const i = errorInfo(e);
@@ -122,13 +124,14 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
     setError("");
     try {
       await google(c);
-      nav("/home");
+      nav(start);
     } catch (e) {
       setError(errorInfo(e).message);
     }
   };
   return (
-    <div className="flex h-full items-center justify-center bg-[radial-gradient(ellipse_at_top,var(--color-navy-800),var(--color-bg)_60%)] p-4">
+    <div className="relative flex min-h-full items-center justify-center display bg-bg p-4">
+      <ThemeToggle className="absolute right-3 top-3" />
       <div className="w-full max-w-sm">
         <Link
           to="/"
@@ -153,7 +156,7 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
               className="space-y-4 rounded-md border border-line bg-panel p-6"
             >
               <div>
-                <h1 className="text-base font-semibold">
+                <h1 className="text-[24px] leading-tight">
                   {reg ? "Create your account" : "Sign in"}
                 </h1>
                 <p className="mt-1 text-muted">
@@ -218,25 +221,17 @@ export default function AuthPage({ mode }: { mode: "login" | "register" }) {
                   in.
                 </p>
               )}
-              <div className="flex items-center gap-3 text-muted">
-                <span className="h-px flex-1 bg-line" />
-                or
-                <span className="h-px flex-1 bg-line" />
-              </div>
-              {cfg.data?.google ? (
-                <GoogleButton
+              {cfg.data?.google && (
+                <>
+                  <div className="flex items-center gap-3 text-muted">
+                    <span className="h-px flex-1 bg-line" />
+                    or
+                    <span className="h-px flex-1 bg-line" />
+                  </div>
+                  <GoogleButton
                   clientId={cfg.data.google}
                   onCredential={onGoogle}
                 />
-              ) : (
-                <>
-                  <Button type="button" disabled className="w-full">
-                    Continue with Google
-                  </Button>
-                  <p className="text-xs text-muted">
-                    Google sign-in is off. Set GOOGLE_CLIENT_ID in backend/.env
-                    to enable it.
-                  </p>
                 </>
               )}
             </form>

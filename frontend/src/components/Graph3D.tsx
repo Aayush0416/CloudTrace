@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePrefs } from "../lib/prefs";
 import * as THREE from "three";
 
 const rng = (seed: number) => () =>
@@ -17,6 +18,7 @@ export default function Graph3D({
 }) {
   const host = useRef<HTMLDivElement>(null),
     [failed, setFailed] = useState(false);
+  const { theme, reducedMotion } = usePrefs();
   useEffect(() => {
     const el = host.current;
     if (!el) return;
@@ -27,8 +29,12 @@ export default function Graph3D({
       setFailed(true);
       return;
     }
+    // read the colours of the area the scene sits in (the landing hero is navy even in the light theme)
+    const css = getComputedStyle(el),
+      col = (name: string, fallback: string) =>
+        new THREE.Color(css.getPropertyValue(name).trim() || fallback);
     const hero = variant === "hero",
-      reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      reduce = reducedMotion;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     Object.assign(renderer.domElement.style, {
       width: "100%",
@@ -40,7 +46,7 @@ export default function Graph3D({
       camera = new THREE.PerspectiveCamera(40, 1, 0.1, 60),
       group = new THREE.Group();
     camera.position.set(0, 0.2, hero ? 10.5 : 9.5);
-    scene.fog = new THREE.Fog(0x000000, 8, 17);
+    scene.fog = new THREE.Fog(col("--scene-fog", "#000000"), 8, 17);
     scene.add(group);
 
     const rand = rng(11),
@@ -85,22 +91,26 @@ export default function Graph3D({
       route.slice(1).flatMap((b, i) => [pts[route[i]], pts[b]]),
     );
     const lineMat = new THREE.LineBasicMaterial({
-        color: 0x2b3d63,
+        color: col("--scene-edge", "#2b3d63"),
         transparent: true,
         opacity: 0.9,
       }),
-      routeMat = new THREE.LineBasicMaterial({ color: 0xfca311 });
+      routeMat = new THREE.LineBasicMaterial({
+        color: col("--color-accent", "#fca311"),
+      });
     group.add(
       new THREE.LineSegments(lineGeo, lineMat),
       new THREE.LineSegments(routeGeo, routeMat),
     );
     const sph = new THREE.SphereGeometry(1, 16, 12);
     const mats = {
-      base: new THREE.MeshBasicMaterial({ color: 0x6f86b3 }),
-      route: new THREE.MeshBasicMaterial({ color: 0xfca311 }),
-      entry: new THREE.MeshBasicMaterial({ color: 0xe5e5e5 }),
-      target: new THREE.MeshBasicMaterial({ color: 0xff4d4f }),
-      pulse: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      base: new THREE.MeshBasicMaterial({ color: col("--scene-node", "#6f86b3") }),
+      route: new THREE.MeshBasicMaterial({
+        color: col("--color-accent", "#fca311"),
+      }),
+      entry: new THREE.MeshBasicMaterial({ color: col("--type-entry", "#e5e5e5") }),
+      target: new THREE.MeshBasicMaterial({ color: col("--color-crit", "#ff4d4f") }),
+      pulse: new THREE.MeshBasicMaterial({ color: col("--scene-pulse", "#ffffff") }),
     };
     pts.forEach((p, i) => {
       const isEntry = i === route[0],
@@ -142,12 +152,20 @@ export default function Graph3D({
     };
 
     const pointer = { x: 0, y: 0 };
-    const onMove = (e: PointerEvent) => {
-      const r = el.getBoundingClientRect();
-      pointer.x = ((e.clientX - r.left) / r.width - 0.5) * 2;
-      pointer.y = ((e.clientY - r.top) / r.height - 0.5) * 2;
+    // As a page background the scene is covered by text, so it follows the pointer anywhere on the page.
+    const listenOn: Window | HTMLElement = hero ? window : el;
+    const onMove = (e: Event) => {
+      const p = e as PointerEvent;
+      if (hero) {
+        pointer.x = (p.clientX / window.innerWidth - 0.5) * 2;
+        pointer.y = (p.clientY / window.innerHeight - 0.5) * 2;
+      } else {
+        const r = el.getBoundingClientRect();
+        pointer.x = ((p.clientX - r.left) / r.width - 0.5) * 2;
+        pointer.y = ((p.clientY - r.top) / r.height - 0.5) * 2;
+      }
     };
-    el.addEventListener("pointermove", onMove);
+    listenOn.addEventListener("pointermove", onMove);
     const render = (t: number) => {
       group.rotation.y = (reduce ? 0.5 : t * 0.00012) + pointer.x * 0.35;
       group.rotation.x = -0.12 + pointer.y * 0.18;
@@ -163,6 +181,13 @@ export default function Graph3D({
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (hero) {
+        // wide screens: a larger graph on the right, leaving the left for the headline; narrow screens: centred behind the text
+        const halfWidth = Math.tan(THREE.MathUtils.degToRad(20)) * camera.position.z * camera.aspect;
+        const wide = w >= 1024;
+        group.position.x = wide ? halfWidth * 0.36 : 0;
+        group.scale.setScalar(wide ? Math.min(1.35, Math.max(1, camera.aspect / 1.7)) : 1);
+      }
       render(performance.now());
     };
     const ro = new ResizeObserver(resize);
@@ -172,13 +197,13 @@ export default function Graph3D({
     return () => {
       renderer.setAnimationLoop(null);
       ro.disconnect();
-      el.removeEventListener("pointermove", onMove);
+      listenOn.removeEventListener("pointermove", onMove);
       [lineGeo, routeGeo, sph].forEach((x) => x.dispose());
       [lineMat, routeMat, ...Object.values(mats)].forEach((x) => x.dispose());
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [variant]);
+  }, [variant, theme, reducedMotion]);
   return (
     <div ref={host} aria-hidden="true" className={className}>
       {failed && (

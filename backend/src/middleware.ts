@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import jwt from "jsonwebtoken";
 import { ZodError } from "zod";
 import { config } from "./config";
@@ -66,4 +67,55 @@ export function errorHandler(
       });
   console.error(err);
   res.status(500).json({ error: "Something went wrong on the server" });
+}
+
+const limited = (error: string) => ({ error });
+/** Per-user limiter for expensive endpoints (import, scan, what-if, remediation ranking). Must run after requireAuth. */
+export const heavyLimiter = rateLimit({
+  windowMs: 10 * 60_000,
+  limit: 30,
+  keyGenerator: (req) => userId(req),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limited("Too many analysis requests. Try again in a few minutes."),
+});
+/** Credential guessing limiter: 10 attempts per 15 minutes per IP + email, so one account can't be hammered from many IPs' shared budget. */
+export const loginLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 10,
+  keyGenerator: (req) =>
+    `${req.ip}|${String(req.body?.email ?? "").toLowerCase()}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limited("Too many sign-in attempts. Try again in 15 minutes."),
+});
+/** Email-sending limiter (verify/reset links): 5 per hour per target address, stops mail bombing. */
+export const mailLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  limit: 5,
+  keyGenerator: (req) => String(req.body?.email ?? "").toLowerCase() || String(req.ip),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: limited("Too many emails requested for this address. Try again later."),
+});
+
+/** Best-effort audit trail: a failure to write the log never fails the request. */
+export async function audit(
+  req: Request,
+  action: string,
+  projectId: string | null,
+  details?: Record<string, unknown>,
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: userId(req),
+        projectId,
+        action,
+        details: (details ?? undefined) as any,
+      },
+    });
+  } catch (err) {
+    console.error("audit log write failed:", err);
+  }
 }

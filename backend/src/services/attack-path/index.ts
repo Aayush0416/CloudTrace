@@ -31,7 +31,9 @@ interface Route {
 const TARGET_TYPES = new Set(["storage", "database", "secret"]);
 const HIGH = new Set(["high", "critical"]);
 export const TOP_K = 5,
-  MAX_PATHS = 500;
+  MAX_PATHS = 500,
+  /** DFS node-expansion budget per entry point: bounds scan time on dense graphs even when few paths reach a target. */
+  MAX_STEPS = 200_000;
 type Adj = Map<string, PathEdge[]>;
 
 /** Edge cost = -ln(confidence x exploitability weight) >= 0, so the cheapest path is the most likely one (costs add, probabilities multiply). */
@@ -239,35 +241,55 @@ export function kShortestRoutes(
   return A;
 }
 
-/** DFS enumerates simple entry->target paths (<= maxDepth edges, capped at maxPaths); BFS and Yen's annotate each with hop and likelihood rank. */
+/** Stable identity of a path: its ordered edge keys. Unlike the node sequence, it tells apart parallel edges (e.g. read vs admin on the same target). */
+export const pathKey = (p: { edges: { key: string }[] }) => sig(p.edges as PathEdge[]);
+
+/**
+ * DFS enumerates simple entry->target paths (<= maxDepth edges); BFS and Yen's annotate each with hop and likelihood rank.
+ * The maxPaths cap is shared fairly between entry points (so a busy internet entry cannot starve a compromised identity),
+ * and each entry also has a node-expansion budget. `truncated` is true if either limit cut the search short.
+ */
 export function findAttackPathsEx(
   g: SecurityGraph,
   maxDepth = 8,
   maxPaths = MAX_PATHS,
+  maxSteps = MAX_STEPS,
 ) {
   const adj = adjacency(g),
-    targets = new Set(findTargets(g));
+    targets = new Set(findTargets(g)),
+    entries = findEntryPoints(g),
+    perEntry = Math.max(1, Math.floor(maxPaths / Math.max(1, entries.length)));
   const found: Omit<AttackPath, "id" | "cost" | "likelihood" | "costRank">[] =
     [];
   const ranks = new Map<string, number>();
   let truncated = false;
-  for (const entry of findEntryPoints(g)) {
+  for (const entry of entries) {
     const nodes = [entry],
       edges: PathEdge[] = [],
       seen = new Set(nodes);
     const hops = new Map<string, number | null>();
+    const foundTargets = new Set<string>();
+    let count = 0,
+      steps = 0,
+      stop = false;
     const dfs = (n: string) => {
-      if (edges.length >= maxDepth || truncated) return;
+      if (edges.length >= maxDepth || stop) return;
       for (const e of adj.get(n) ?? []) {
         if (seen.has(e.target)) continue;
+        if (++steps > maxSteps) {
+          stop = truncated = true;
+          return;
+        }
         nodes.push(e.target);
         seen.add(e.target);
         edges.push(e);
         if (targets.has(e.target)) {
-          if (found.length >= maxPaths) truncated = true;
+          if (count >= perEntry) stop = truncated = true;
           else {
             if (!hops.has(e.target))
               hops.set(e.target, shortestHops(adj, entry, e.target));
+            count++;
+            foundTargets.add(e.target);
             found.push({
               entryPoint: entry,
               target: e.target,
@@ -277,15 +299,16 @@ export function findAttackPathsEx(
             });
           }
         }
-        dfs(e.target);
+        if (!stop) dfs(e.target);
         nodes.pop();
         seen.delete(e.target);
         edges.pop();
-        if (truncated) return;
+        if (stop) return;
       }
     };
     dfs(entry);
-    for (const t of targets)
+    // Likelihood ranking is only needed for targets that actually have a path.
+    for (const t of [...foundTargets].sort())
       kShortestRoutes(adj, entry, t).forEach((r, i) =>
         ranks.set(sig(r.edges), i + 1),
       );
